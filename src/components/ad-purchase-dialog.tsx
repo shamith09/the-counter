@@ -23,7 +23,7 @@ import { AuthButton } from "@/components/auth-button";
 import { CreditCard, Plus } from "lucide-react";
 import { useMarqueeAds } from "./marquee-ads";
 
-const AD_PRICE = 5;
+const AD_PRICE = 500;
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string,
