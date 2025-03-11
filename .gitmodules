@@ -1,0 +1,6 @@
+[submodule "counter-ws-server"]
+	path = counter-ws-server
+	url = https://github.com/shamith09/counter-ws-server.git
+[submodule "counter-stats-service"]
+	path = counter-stats-service
+	url = https://github.com/shamith09/counter-stats-service.git
