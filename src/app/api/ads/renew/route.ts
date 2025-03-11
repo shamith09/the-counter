@@ -81,15 +81,15 @@ export async function POST(request: Request) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: price.unit_amount,
       currency: price.currency,
-      customer: ad.stripe_customer_id,
+      customer: ad.stripe_customer_id as string,
       automatic_payment_methods: {
         enabled: true,
       },
       metadata: {
-        adId: adId,
-        userId: userId,
+        adId: adId as string,
+        userId: userId as string,
         action: "renew",
-        content: ad.content,
+        content: ad.content as string,
         autoRenew:
           autoRenew !== undefined ? String(autoRenew) : String(ad.auto_renew),
       },

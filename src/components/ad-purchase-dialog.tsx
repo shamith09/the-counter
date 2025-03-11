@@ -16,13 +16,11 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AuthButton } from "@/components/auth-button";
 import { CreditCard, Plus } from "lucide-react";
-import { toast } from "sonner";
 import { useMarqueeAds } from "./marquee-ads";
 
 const AD_PRICE = 5;

@@ -34,7 +34,7 @@ export async function GET() {
       `,
     );
 
-    const count = parseInt(adsResult.rows[0].count, 10);
+    const count = parseInt(adsResult.rows[0].count as string, 10);
 
     return NextResponse.json({
       hasActiveAds: count > 0,
