@@ -27,11 +27,19 @@ import {
 } from "@/components/ui/table";
 import { formatInTimeZone } from "date-fns-tz";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Trophy,
+  DollarSign,
+  ChevronLeft,
+  ChevronRight,
+  Award,
+  Clock,
+} from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
 import { useSession } from "next-auth/react";
 import { PayPalSetupDialog } from "@/components/paypal-setup-dialog";
-import { Clock, Trophy, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Import map components dynamically with ssr disabled
 const MapComponent = dynamic(
@@ -44,6 +52,7 @@ interface UserStats {
   username: string;
   increment_count: number;
   last_increment: string;
+  rank?: number;
 }
 
 interface CountryStats {
@@ -84,6 +93,33 @@ interface NextPayout {
 interface PayoutInfo {
   lastWinner: LastWinner;
   nextPayout: NextPayout;
+}
+
+interface PersonalStats {
+  increment_count: number;
+  total_value_added: number;
+  last_increment: string;
+  streak_days: number;
+  longest_streak: number;
+  last_streak_date: string;
+  rank: number;
+}
+
+interface UserActivity {
+  timestamp: string;
+  value_diff: number;
+}
+
+interface DailyActivity {
+  day: string;
+  count: number;
+  total_value: number;
+}
+
+interface PersonalStatsResponse {
+  stats: PersonalStats | null;
+  activity: UserActivity[];
+  dailyActivity: DailyActivity[];
 }
 
 const chartConfig = {
@@ -148,6 +184,13 @@ export default function StatsPage() {
   const { data: session } = useSession();
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [personalStats, setPersonalStats] = useState<PersonalStats | null>(
+    null,
+  );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [userRank, setUserRank] = useState<number | null>(null);
+  const pageSize = 10;
 
   const timeRangeLabels: Record<TimeRange, string> = {
     hour: "Last Hour",
@@ -190,7 +233,9 @@ export default function StatsPage() {
         // Fetch all data with the same time range
         const [leaderboardRes, countryRes, historyRes, payoutInfoRes] =
           await Promise.all([
-            fetch(`/api/stats/leaderboard?range=${selectedTimeRange}`),
+            fetch(
+              `/api/stats/leaderboard?range=${selectedTimeRange}&page=${currentPage}&pageSize=${pageSize}`,
+            ),
             fetch(`/api/stats/country?range=${selectedTimeRange}`),
             fetch(`/api/counter/history?range=${selectedTimeRange}`),
             fetch(`/api/last-winner-and-next-payout`),
@@ -204,7 +249,11 @@ export default function StatsPage() {
             payoutInfoRes.json(),
           ]);
 
-        setLeaderboard(leaderboardData || []);
+        setLeaderboard(leaderboardData.users || []);
+        setTotalPages(leaderboardData.pagination?.totalPages || 1);
+        if (leaderboardData.currentUser?.rank) {
+          setUserRank(leaderboardData.currentUser.rank);
+        }
         setCountryStats(countryData || []);
         setHistory(historyData || []);
         setPayoutInfo(payoutInfoData || null);
@@ -217,19 +266,26 @@ export default function StatsPage() {
             seconds: payoutInfoData.nextPayout.timeLeft.seconds,
           });
         }
+
+        // Fetch personal stats if user is logged in
+        if (session?.user) {
+          const personalStatsRes = await fetch("/api/stats/personal");
+          if (personalStatsRes.ok) {
+            const personalStatsData: PersonalStatsResponse =
+              await personalStatsRes.json();
+            setPersonalStats(personalStatsData.stats);
+          }
+        }
       } catch (error) {
-        console.error("Error fetching stats:", error);
-        setError("Failed to load stats data. Please try again later.");
+        console.error("Error fetching data:", error);
+        setError("Failed to load statistics");
       } finally {
-        // Only set initialLoading to false after the first load
         setInitialLoading(false);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [selectedTimeRange]);
+  }, [selectedTimeRange, session, currentPage]);
 
   // Update countdown timer every second
   useEffect(() => {
@@ -392,6 +448,13 @@ export default function StatsPage() {
     checkPayPalSetup();
   }, [session]);
 
+  // Add this function to handle pagination
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   if (initialLoading) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center text-purple-300">
@@ -540,9 +603,31 @@ export default function StatsPage() {
         </TabsList>
       </Tabs>
 
+      {/* Leaderboard Card */}
       <Card className="border-purple-500/20 bg-black/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="text-purple-300">Leaderboard</CardTitle>
+          <CardTitle className="text-purple-300 flex items-center">
+            <Award className="mr-2 h-5 w-5" /> Leaderboard
+          </CardTitle>
+          <CardDescription className="flex justify-between w-full items-center text-purple-200/70">
+            <span>Top users ranked by value added to the counter</span>
+            {userRank && session?.user && (
+              <div className="flex flex-col items-end">
+                <span className="font-semibold">
+                  Your Rank:{" "}
+                  <span className="text-purple-300 font-bold">{userRank}</span>
+                </span>
+                {personalStats && (
+                  <span className="font-semibold">
+                    Total value added:{" "}
+                    <span className="text-purple-300 font-bold">
+                      {personalStats.total_value_added}
+                    </span>
+                  </span>
+                )}
+              </div>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -557,9 +642,17 @@ export default function StatsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {leaderboard.map((user, index) => (
-                <TableRow key={user.user_id} className="border-purple-500/20">
-                  <TableCell className="text-purple-200">{index + 1}</TableCell>
+              {leaderboard.map((user) => (
+                <TableRow
+                  key={user.user_id}
+                  className={`border-purple-500/20 ${session?.user && user.username === session.user.name ? "bg-purple-900/20" : ""}`}
+                >
+                  <TableCell className="text-purple-200">
+                    {user.rank ||
+                      (currentPage - 1) * pageSize +
+                        leaderboard.indexOf(user) +
+                        1}
+                  </TableCell>
                   <TableCell className="text-purple-200">
                     {user.username}
                   </TableCell>
@@ -573,6 +666,64 @@ export default function StatsPage() {
               ))}
             </TableBody>
           </Table>
+
+          {/* Pagination controls at bottom */}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-6">
+              <div className="inline-flex items-center justify-center gap-1 rounded-md border border-purple-500/20 bg-black/30 px-2 py-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 text-purple-300"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Show pages around current page
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <Button
+                      key={i}
+                      variant={currentPage === pageNum ? "default" : "ghost"}
+                      size="icon"
+                      onClick={() => handlePageChange(pageNum)}
+                      className={
+                        currentPage === pageNum
+                          ? "h-8 w-8 bg-purple-600"
+                          : "h-8 w-8 text-purple-300"
+                      }
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 text-purple-300"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

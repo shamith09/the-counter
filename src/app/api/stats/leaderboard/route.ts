@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, sql } from "@/lib/db";
+import { getServerSession } from "next-auth";
 
 // Define types for database results
 interface DatabaseResult {
@@ -19,6 +20,11 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const timeRange = searchParams.get("range");
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+
+    // Calculate offset for pagination
+    const offset = (page - 1) * pageSize;
 
     let timeWindow: string;
 
@@ -40,8 +46,138 @@ export async function GET(request: NextRequest) {
         timeWindow = "ALL TIME";
     }
 
-    let result;
+    // Get the current user's ID if they're logged in
+    const session = await getServerSession();
+    let currentUserId = null;
+    let userRank = null;
 
+    if (session?.user?.email) {
+      const userResult = await db.query(
+        db.sql`SELECT id FROM users WHERE email = ${session.user.email}`,
+      );
+
+      if (userResult.rows.length > 0) {
+        currentUserId = userResult.rows[0].id;
+      }
+    }
+
+    let result;
+    let totalUsers = 0;
+
+    // Get total count for pagination
+    if (timeWindow === "ALL TIME") {
+      try {
+        const countResult = await db.query(
+          db.sql`
+            SELECT COUNT(*) as total
+            FROM users u
+            LEFT JOIN user_stats us ON u.id = us.user_id
+            WHERE u.username IS NOT NULL AND us.increment_count > 0
+          `,
+        );
+        totalUsers = parseInt(String(countResult.rows[0]?.total || "0"));
+      } catch (error) {
+        console.error("Error getting total count:", error);
+        totalUsers = 0;
+      }
+    } else {
+      try {
+        const countQuery = `
+          SELECT COUNT(*) as total
+          FROM users u
+          LEFT JOIN (
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added,
+              COUNT(*) as increment_count
+            FROM user_activity
+            WHERE created_at > NOW() - INTERVAL '${timeWindow}'
+            GROUP BY user_id
+          ) tws ON u.id = tws.user_id
+          WHERE u.username IS NOT NULL AND tws.increment_count > 0
+        `;
+        const countResult = await sql(countQuery);
+
+        // Safely handle potentially empty results
+        if (
+          countResult &&
+          typeof countResult === "object" &&
+          "rows" in countResult &&
+          Array.isArray(countResult.rows) &&
+          countResult.rows.length > 0 &&
+          countResult.rows[0].total
+        ) {
+          totalUsers = parseInt(countResult.rows[0].total);
+        } else {
+          totalUsers = 0;
+        }
+      } catch (error) {
+        console.error("Error getting total count:", error);
+        totalUsers = 0;
+      }
+    }
+
+    // Get user's rank if logged in
+    if (currentUserId) {
+      if (timeWindow === "ALL TIME") {
+        try {
+          const rankResult = await db.query(
+            db.sql`
+              SELECT 
+                (
+                  SELECT COUNT(*) + 1
+                  FROM user_stats
+                  WHERE total_value_added > (SELECT total_value_added FROM user_stats WHERE user_id = ${currentUserId})
+                ) as rank
+            `,
+          );
+
+          if (
+            rankResult &&
+            rankResult.rows &&
+            rankResult.rows.length > 0 &&
+            rankResult.rows[0].rank
+          ) {
+            userRank = parseInt(String(rankResult.rows[0].rank));
+          }
+        } catch (error) {
+          console.error("Error getting user rank:", error);
+        }
+      } else {
+        try {
+          const rankQuery = `
+            WITH user_ranks AS (
+              SELECT 
+                user_id,
+                SUM(value_diff) as total_value_added,
+                RANK() OVER (ORDER BY SUM(value_diff) DESC) as rank
+              FROM user_activity
+              WHERE created_at > NOW() - INTERVAL '${timeWindow}'
+              GROUP BY user_id
+            )
+            SELECT rank
+            FROM user_ranks
+            WHERE user_id = '${currentUserId}'
+          `;
+          const rankResult = await sql(rankQuery);
+
+          if (
+            rankResult &&
+            typeof rankResult === "object" &&
+            "rows" in rankResult &&
+            Array.isArray(rankResult.rows) &&
+            rankResult.rows.length > 0 &&
+            rankResult.rows[0].rank
+          ) {
+            userRank = parseInt(String(rankResult.rows[0].rank));
+          }
+        } catch (error) {
+          console.error("Error getting user rank:", error);
+        }
+      }
+    }
+
+    // Get leaderboard data with pagination
     if (timeWindow === "ALL TIME") {
       result = (await db.sql`
         WITH total_activity AS (
@@ -63,10 +199,13 @@ export async function GET(request: NextRequest) {
           users u
         LEFT JOIN total_activity ta ON u.id = ta.user_id
         WHERE 
-          u.username IS NOT NULL
+          u.username IS NOT NULL AND
+          COALESCE(ta.increment_count, 0) > 0
         ORDER BY 
           total_value_added DESC
-        LIMIT 100`) as unknown as LeaderboardRow[] | DatabaseResult;
+        LIMIT ${pageSize} OFFSET ${offset}`) as unknown as
+        | LeaderboardRow[]
+        | DatabaseResult;
     } else if (timeWindow === "24 HOURS") {
       // For 24 hour window, use a more precise query
       const intervalQuery = `
@@ -90,10 +229,11 @@ export async function GET(request: NextRequest) {
           users u
         LEFT JOIN time_window_stats tws ON u.id = tws.user_id
         WHERE 
-          u.username IS NOT NULL
+          u.username IS NOT NULL AND
+          COALESCE(tws.increment_count, 0) > 0
         ORDER BY 
           total_value_added DESC
-        LIMIT 100`;
+        LIMIT ${pageSize} OFFSET ${offset}`;
 
       result = await sql(intervalQuery);
     } else {
@@ -119,17 +259,18 @@ export async function GET(request: NextRequest) {
           users u
         LEFT JOIN time_window_stats tws ON u.id = tws.user_id
         WHERE 
-          u.username IS NOT NULL
+          u.username IS NOT NULL AND
+          COALESCE(tws.increment_count, 0) > 0
         ORDER BY 
           total_value_added DESC
-        LIMIT 100`;
+        LIMIT ${pageSize} OFFSET ${offset}`;
 
       result = await sql(intervalQuery);
     }
 
     // Format the response to match the expected structure
     const resultData = Array.isArray(result) ? result : result.rows || [];
-    const stats = resultData.map((row) => ({
+    const stats = resultData.map((row, index) => ({
       user_id: row.id,
       username: row.username,
       increment_count:
@@ -141,11 +282,27 @@ export async function GET(request: NextRequest) {
           ? parseFloat(row.total_value_added)
           : row.total_value_added,
       last_increment: row.last_increment,
+      rank: offset + index + 1,
     }));
 
-    return NextResponse.json(stats);
+    return NextResponse.json({
+      users: stats,
+      pagination: {
+        page,
+        pageSize,
+        totalPages: Math.ceil(totalUsers / pageSize),
+        totalUsers,
+      },
+      currentUser: {
+        id: currentUserId,
+        rank: userRank,
+      },
+    });
   } catch (error) {
     console.error("Error getting leaderboard:", error);
-    return NextResponse.json([]);
+    return NextResponse.json(
+      { error: "Failed to fetch leaderboard" },
+      { status: 500 },
+    );
   }
 }
