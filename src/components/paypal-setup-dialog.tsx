@@ -59,7 +59,7 @@ export function PayPalSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-black border border-gray-800 text-white">
+      <DialogContent className="bg-gray-900 border-gray-800 text-white">
         <DialogHeader>
           <DialogTitle className="text-white">
             Set up payout information

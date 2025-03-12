@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
 
     // Determine time window for query
     switch (timeRange) {
+      case "hour":
+        timeWindow = "1 HOUR";
+        break;
       case "day":
         timeWindow = "24 HOURS";
         break;
