@@ -62,15 +62,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check if today is Monday (day 1)
-    const today = new Date();
-    if (today.getUTCDay() !== 1 && process.env.NODE_ENV !== "development") {
-      return NextResponse.json({
-        success: false,
-        message: "Payouts are only processed on Mondays (UTC)",
-      });
-    }
-
     // Get the top user from the previous week
     const lastWeekStart = new Date();
     lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
