@@ -59,10 +59,12 @@ export function PayPalSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-black border border-gray-800 text-white">
         <DialogHeader>
-          <DialogTitle>Set up payout information</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">
+            Set up payout information
+          </DialogTitle>
+          <DialogDescription className="text-gray-400">
             To receive weekly payouts when you top the leaderboard, please
             provide your PayPal email address. This ensures we can send your
             winnings securely.
@@ -71,7 +73,10 @@ export function PayPalSetupDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="paypal-email" className="text-sm font-medium">
+            <label
+              htmlFor="paypal-email"
+              className="text-sm font-medium text-gray-300"
+            >
               PayPal Email Address
             </label>
             <Input
@@ -81,13 +86,14 @@ export function PayPalSetupDialog({
               value={paypalEmail}
               onChange={(e) => setPaypalEmail(e.target.value)}
               required
+              className="bg-gray-900 border-gray-700 text-white"
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
           </div>
 
           <Button
             type="submit"
-            className="w-full"
+            className="w-full bg-blue-600 hover:bg-blue-700"
             disabled={loading || !paypalEmail}
           >
             {loading ? (
