@@ -830,7 +830,7 @@ export default function StatsPage() {
                   <CardContent className="pt-6">
                     <div className="text-center">
                       <div className="text-sm text-purple-300 mb-2">
-                        Average Per Hour
+                        Average Increase Per Hour
                       </div>
                       <div className="text-2xl font-bold text-purple-100">
                         {getStatistics(history)?.averagePerHour}
