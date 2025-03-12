@@ -3,6 +3,22 @@
     {
       "path": "/api/tasks/process-weekly-payout",
       "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/tasks/log-counter-history",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/tasks/aggregate-hourly-history",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/tasks/aggregate-daily-history",
+      "schedule": "10 0 * * *"
+    },
+    {
+      "path": "/api/tasks/cleanup-old-history",
+      "schedule": "15 1 * * *"
     }
   ]
 }
