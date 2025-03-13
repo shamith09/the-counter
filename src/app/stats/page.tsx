@@ -897,7 +897,10 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[0, "dataMax"]}
+                      domain={[
+                        0,
+                        (dataMax: number) => Math.ceil(dataMax * 1.1),
+                      ]}
                       tickLine={false}
                       axisLine={false}
                     />
@@ -966,7 +969,10 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[0, "dataMax"]}
+                      domain={[
+                        0,
+                        (dataMax: number) => Math.ceil(dataMax * 1.1),
+                      ]}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `${value.toLocaleString()}`}
