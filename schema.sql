@@ -201,6 +201,16 @@ CREATE TABLE leaderboard_payouts (
 CREATE INDEX leaderboard_payouts_week_start_idx ON leaderboard_payouts(week_start);
 CREATE INDEX leaderboard_payouts_status_idx ON leaderboard_payouts(status);
 
+-- Payment verifications table for tracking Stripe payments
+CREATE TABLE payment_verifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payment_intent_id TEXT UNIQUE NOT NULL,
+    amount INTEGER NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX payment_verifications_payment_intent_idx ON payment_verifications(payment_intent_id);
+
 -- Grant permissions for all tables
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neondb_owner;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO neondb_owner;

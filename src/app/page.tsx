@@ -114,7 +114,7 @@ const PaymentForm = ({
   amount,
   setAmount,
 }: {
-  onSuccess: (amount: number) => void;
+  onSuccess: (amount: number, paymentIntentId: string) => void;
   amount: number;
   setAmount: (amount: number) => void;
 }) => {
@@ -158,7 +158,7 @@ const PaymentForm = ({
       if (error) {
         console.error("Payment error:", error);
       } else if (paymentIntent.status === "succeeded") {
-        onSuccess(amount);
+        onSuccess(amount, paymentIntent.id);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -347,6 +347,22 @@ export default function Home() {
           if (data.type === "viewer_count") {
             setViewerCount(parseInt(data.count, 10));
           }
+
+          // Handle error messages
+          if (data.type === "error") {
+            console.error("Server error:", data.count);
+            setError(data.count);
+            // Clear error after 5 seconds
+            setTimeout(() => setError(null), 5000);
+          }
+
+          // Handle rate limit messages
+          if (data.type === "rate_limited") {
+            console.warn("Rate limited:", data.count);
+            setError(data.count);
+            // Clear error after 5 seconds
+            setTimeout(() => setError(null), 5000);
+          }
         } catch (error) {
           console.error("Error parsing message:", error);
         }
@@ -440,14 +456,18 @@ export default function Home() {
     }
   }, []);
 
-  const handlePaymentSuccess = (amount: number) => {
+  const handlePaymentSuccess = (amount: number, paymentIntentId: string) => {
     setShowPayment(false);
     setClientSecret(null);
-    performOperation("multiply", amount);
+    performOperation("multiply", amount, paymentIntentId);
   };
 
   const performOperation = useCallback(
-    async (operation: "increment" | "multiply", amount?: number) => {
+    async (
+      operation: "increment" | "multiply",
+      amount?: number,
+      paymentIntentId?: string,
+    ) => {
       if (!socket || socket.readyState !== WebSocket.OPEN || isLoading) {
         return;
       }
@@ -482,6 +502,7 @@ export default function Home() {
           amount: count ?? "0",
           operation,
           multiply_amount: amount,
+          payment_intent_id: paymentIntentId,
         };
 
         console.log("Sending increment message:", message);
