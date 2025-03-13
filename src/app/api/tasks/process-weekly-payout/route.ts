@@ -31,22 +31,12 @@ export const revalidate = 0;
 
 // Add GET handler to handle cron job requests which use GET by default
 export async function GET(request: NextRequest) {
-  console.log("[process-weekly-payout] GET request received", {
-    headers: Object.fromEntries(request.headers.entries()),
-    url: request.url,
-    isCron: request.headers.get("x-vercel-cron") === "true",
-  });
-
-  // Redirect to POST handler logic
+  console.log("[process-weekly-payout] GET request received");
   return handlePayoutRequest(request);
 }
 
 export async function POST(request: NextRequest) {
-  console.log("[process-weekly-payout] POST request received", {
-    headers: Object.fromEntries(request.headers.entries()),
-    url: request.url,
-  });
-
+  console.log("[process-weekly-payout] POST request received");
   return handlePayoutRequest(request);
 }
 
@@ -54,26 +44,14 @@ async function handlePayoutRequest(request: NextRequest) {
   try {
     // Check if the request is coming from a Vercel cron job
     const isVercelCron = request.headers.get("x-vercel-cron") === "true";
-    console.log("[process-weekly-payout] isVercelCron:", isVercelCron);
 
     // Check if the request has a valid API key
     const authHeader = request.headers.get("Authorization");
     const isValidApiKey = authHeader === `Bearer ${process.env.CRON_SECRET}`;
-    console.log(
-      "[process-weekly-payout] Authorization header present:",
-      !!authHeader,
-    );
-    console.log("[process-weekly-payout] isValidApiKey:", isValidApiKey);
 
     // If not a cron job or doesn't have valid API key, verify admin authentication
     if (!isVercelCron && !isValidApiKey) {
       const session = await getServerSession();
-      console.log("[process-weekly-payout] User session:", {
-        email: session?.user?.email,
-        isAdmin: session?.user?.email
-          ? ADMIN_EMAILS.includes(session.user.email)
-          : false,
-      });
 
       // Check if user is authorized to process payouts
       if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
@@ -86,10 +64,6 @@ async function handlePayoutRequest(request: NextRequest) {
 
     // Check if weekly payouts are enabled
     const enableWeeklyPayouts = process.env.ENABLE_WEEKLY_PAYOUTS === "true";
-    console.log(
-      "[process-weekly-payout] Weekly payouts enabled:",
-      enableWeeklyPayouts,
-    );
 
     if (!enableWeeklyPayouts) {
       return NextResponse.json({
@@ -159,8 +133,6 @@ async function handlePayoutRequest(request: NextRequest) {
     console.log("[process-weekly-payout] Winner selected:", {
       id: winner.id,
       username: winner.username,
-      hasEmail: !!winner.email,
-      hasPaypalEmail: !!winner.paypal_email,
       totalValueAdded: winner.total_value_added,
     });
 
@@ -174,11 +146,6 @@ async function handlePayoutRequest(request: NextRequest) {
       : payoutSettings.rows || [];
     const payoutAmount =
       settingsRows.length > 0 ? parseFloat(settingsRows[0].amount) : 10.0; // Default to $10 if no settings found
-
-    console.log("[process-weekly-payout] Payout amount:", {
-      amount: payoutAmount,
-      fromSettings: settingsRows.length > 0,
-    });
 
     if (isNaN(payoutAmount) || payoutAmount <= 0) {
       console.error(`Invalid payout amount: ${payoutAmount}`);
@@ -224,16 +191,6 @@ async function handlePayoutRequest(request: NextRequest) {
         ? "https://api-m.sandbox.paypal.com"
         : "https://api-m.paypal.com";
 
-    console.log("[process-weekly-payout] Using PayPal API URL:", baseUrl);
-    console.log(
-      "[process-weekly-payout] PayPal client ID exists:",
-      !!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID,
-    );
-    console.log(
-      "[process-weekly-payout] PayPal secret exists:",
-      !!process.env.PAYPAL_SECRET,
-    );
-
     const authResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: {
@@ -242,11 +199,6 @@ async function handlePayoutRequest(request: NextRequest) {
       },
       body: "grant_type=client_credentials",
     });
-
-    console.log(
-      "[process-weekly-payout] PayPal auth response status:",
-      authResponse.status,
-    );
 
     if (!authResponse.ok) {
       const errorText = await authResponse.text();
@@ -258,7 +210,6 @@ async function handlePayoutRequest(request: NextRequest) {
     }
 
     const { access_token } = await authResponse.json();
-    console.log("[process-weekly-payout] PayPal access token received");
 
     // Create payout
     const payoutResponse = await fetch(`${baseUrl}/v1/payments/payouts`, {
@@ -269,11 +220,6 @@ async function handlePayoutRequest(request: NextRequest) {
       },
       body: JSON.stringify(payoutData),
     });
-
-    console.log(
-      "[process-weekly-payout] PayPal payout response status:",
-      payoutResponse.status,
-    );
 
     const payoutResult = await payoutResponse.json();
 
@@ -294,8 +240,6 @@ async function handlePayoutRequest(request: NextRequest) {
       payoutBatchId: payoutResult.batch_header.payout_batch_id,
       status: payoutResult.batch_header.batch_status,
       userId: winner.id,
-      userEmail: winner.email,
-      paypalEmail: winner.paypal_email,
       amount: payoutAmount.toFixed(2),
     });
 
