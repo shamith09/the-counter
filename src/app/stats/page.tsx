@@ -40,6 +40,7 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis } from "recharts";
 import { useSession } from "next-auth/react";
 import { PayPalSetupDialog } from "@/components/paypal-setup-dialog";
 import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
 
 // Import map components dynamically with ssr disabled
 const MapComponent = dynamic(
@@ -51,6 +52,7 @@ interface UserStats {
   user_id: string;
   username: string;
   increment_count: number;
+  total_value_added: number;
   last_increment: string;
   rank?: number;
 }
@@ -59,6 +61,7 @@ interface CountryStats {
   country_code: string;
   country_name: string;
   increment_count: number;
+  total_value_added: number;
   last_increment: string;
 }
 
@@ -695,7 +698,7 @@ export default function StatsPage() {
                     {user.username}
                   </TableCell>
                   <TableCell className="text-purple-200">
-                    {user.increment_count}
+                    {user.total_value_added}
                   </TableCell>
                   <TableCell className="text-purple-200">
                     {formatDate(user.last_increment, "MM/dd/yyyy hh:mm a")}
@@ -795,21 +798,23 @@ export default function StatsPage() {
               </TableHeader>
               <TableBody>
                 {countryStats.map((country, index) => (
-                  <TableRow
-                    key={country.country_code}
-                    className="border-purple-500/20"
-                  >
-                    <TableCell className="text-purple-200">
-                      {index + 1}
+                  <TableRow key={country.country_code}>
+                    <TableCell className="font-medium">{index + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`fi fi-${country.country_code.toLowerCase()}`}
+                        />
+                        {country.country_name}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-purple-200">
-                      {country.country_name}
+                    <TableCell>
+                      {country.total_value_added.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-purple-200">
-                      {country.increment_count}
-                    </TableCell>
-                    <TableCell className="text-purple-200">
-                      {formatDate(country.last_increment, "MM/dd/yyyy hh:mm a")}
+                    <TableCell>
+                      {formatDistanceToNow(new Date(country.last_increment), {
+                        addSuffix: true,
+                      })}
                     </TableCell>
                   </TableRow>
                 ))}

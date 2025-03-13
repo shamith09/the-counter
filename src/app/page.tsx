@@ -454,15 +454,37 @@ export default function Home() {
 
       setIsLoading(true);
       try {
+        // Log session data to help with debugging
+        console.log("Session data for attribution:", {
+          id: session?.user?.id,
+          email: session?.user?.email,
+          name: session?.user?.name,
+        });
+
+        // Determine the best user identifier to send
+        let userId;
+        if (session?.user) {
+          // Try ID first, then email as fallback
+          userId = session.user.id
+            ? String(session.user.id)
+            : session.user.email
+              ? session.user.email
+              : undefined;
+
+          console.log("Using user identifier for attribution:", userId);
+        }
+
         const message = {
           type: "increment",
           country_code: location?.country_code || "",
           country_name: location?.country_name || "",
-          user_id: session?.user?.id ? String(session.user.id) : undefined,
+          user_id: userId,
           amount: count ?? "0",
           operation,
           multiply_amount: amount,
         };
+
+        console.log("Sending increment message:", message);
         socket.send(JSON.stringify(message));
       } catch (error) {
         console.error("Error sending operation:", error);
@@ -471,7 +493,7 @@ export default function Home() {
         setTimeout(() => setIsLoading(false), 100);
       }
     },
-    [socket, isLoading, count, session?.user?.id, location],
+    [socket, isLoading, count, session?.user, location],
   );
 
   const handleMultiplyClick = async () => {
