@@ -191,6 +191,8 @@ export default function StatsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [userRank, setUserRank] = useState<number | null>(null);
   const pageSize = 10;
+  // Add refresh interval in milliseconds (5 seconds)
+  const REFRESH_INTERVAL = 5000;
 
   const timeRangeLabels: Record<TimeRange, string> = {
     hour: "Last Hour",
@@ -286,7 +288,16 @@ export default function StatsPage() {
       }
     };
 
+    // Initial fetch
     fetchData();
+
+    // Set up auto-refresh interval
+    const refreshInterval = setInterval(() => {
+      fetchData();
+    }, REFRESH_INTERVAL);
+
+    // Clean up interval on unmount or when dependencies change
+    return () => clearInterval(refreshInterval);
   }, [selectedTimeRange, session, currentPage]);
 
   // Update countdown timer every second
