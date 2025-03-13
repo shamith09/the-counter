@@ -127,6 +127,36 @@ INSERT INTO payout_settings (amount)
 SELECT 10.00
 WHERE NOT EXISTS (SELECT 1 FROM payout_settings);
 
+-- Function to update user streaks
+CREATE OR REPLACE FUNCTION update_user_streak()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if this is the first increment of the day
+    IF NOT EXISTS (
+        SELECT 1 FROM user_stats 
+        WHERE user_id = NEW.user_id 
+        AND DATE(last_increment) = CURRENT_DATE
+    ) THEN
+        -- Check if the last increment was yesterday
+        IF DATE(OLD.last_streak_date) = CURRENT_DATE - 1 THEN
+            NEW.streak_days = OLD.streak_days + 1;
+            NEW.longest_streak = GREATEST(NEW.streak_days, OLD.longest_streak);
+        ELSE
+            NEW.streak_days = 1;
+        END IF;
+        NEW.last_streak_date = CURRENT_DATE;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update streaks on increment
+CREATE TRIGGER update_user_streak_trigger
+BEFORE UPDATE ON user_stats
+FOR EACH ROW
+WHEN (NEW.last_increment IS DISTINCT FROM OLD.last_increment)
+EXECUTE FUNCTION update_user_streak();
+
 -- Activity tracking tables for time-windowed statistics
 CREATE TABLE user_activity (
     id SERIAL PRIMARY KEY,

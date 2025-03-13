@@ -587,60 +587,6 @@ export default function StatsPage() {
         </Card>
       </div>
 
-      {/* Personal Stats Card - Only shown when user is logged in */}
-      {session?.user && personalStats && (
-        <Card className="border-purple-500/20 bg-black/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-purple-300 flex items-center">
-              <Award className="mr-2 h-5 w-5" /> Your Stats (
-              {timeRangeLabels[selectedTimeRange]})
-            </CardTitle>
-            <CardDescription className="text-purple-200/70">
-              Your personal contribution to The Counter
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-purple-900/30 p-4 rounded-lg">
-                <div className="text-sm text-purple-300 mb-1">Your Rank</div>
-                <div className="text-2xl font-bold text-purple-100">
-                  #{personalStats.rank}
-                </div>
-              </div>
-              <div className="bg-purple-900/30 p-4 rounded-lg">
-                <div className="text-sm text-purple-300 mb-1">Value Added</div>
-                <div className="text-2xl font-bold text-purple-100">
-                  {personalStats.total_value_added.toLocaleString()}
-                </div>
-              </div>
-              <div className="bg-purple-900/30 p-4 rounded-lg">
-                <div className="text-sm text-purple-300 mb-1">Increments</div>
-                <div className="text-2xl font-bold text-purple-100">
-                  {personalStats.increment_count.toLocaleString()}
-                </div>
-              </div>
-              <div className="bg-purple-900/30 p-4 rounded-lg">
-                <div className="text-sm text-purple-300 mb-1">
-                  Current Streak
-                </div>
-                <div className="text-2xl font-bold text-purple-100">
-                  {personalStats.streak_days} days
-                </div>
-                <div className="text-xs text-purple-300">
-                  Longest: {personalStats.longest_streak} days
-                </div>
-              </div>
-            </div>
-            {personalStats.last_increment && (
-              <div className="mt-4 text-center text-sm text-purple-300">
-                Last active:{" "}
-                {formatDate(personalStats.last_increment, "MM/dd/yyyy hh:mm a")}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs
         defaultValue={selectedTimeRange}
         onValueChange={(value) => setSelectedTimeRange(value as TimeRange)}
@@ -979,13 +925,7 @@ export default function StatsPage() {
 
               <div className="h-[300px]">
                 <div className="text-sm text-purple-300 mb-2">
-                  Counter Change (
-                  {selectedTimeRange === "year" || selectedTimeRange === "month"
-                    ? "increments per day"
-                    : selectedTimeRange === "week"
-                      ? "increments per hour"
-                      : "increments per minute"}
-                  )
+                  Counter Change Over Time
                 </div>
                 <ChartContainer
                   config={chartConfig}
