@@ -388,6 +388,24 @@ export default function StatsPage() {
   // Prepare history data for the charts in chronological order (oldest to newest)
   const chartData = useMemo(() => [...history].reverse(), [history]);
 
+  // Calculate max value for chart scaling with a generous buffer
+  const maxChartValue = useMemo(() => {
+    if (history.length === 0) return 100;
+
+    // Find the maximum count value in the history data
+    const maxCount = Math.max(...history.map((item) => item.count));
+
+    // Find the maximum rate value in the rate of change data
+    const maxRate =
+      rateOfChangeData.length > 0
+        ? Math.max(...rateOfChangeData.map((item) => item.rate))
+        : 0;
+
+    // Use the larger of the two maximums and add a 20% buffer
+    const overallMax = Math.max(maxCount, maxRate);
+    return Math.ceil(overallMax * 1.2);
+  }, [history, rateOfChangeData]);
+
   const distributionData = useMemo(() => {
     const dayNames = [
       "Sunday",
@@ -897,10 +915,7 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[
-                        0,
-                        (dataMax: number) => Math.ceil(dataMax * 1.1),
-                      ]}
+                      domain={[0, maxChartValue]}
                       tickLine={false}
                       axisLine={false}
                     />
@@ -969,10 +984,7 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[
-                        0,
-                        (dataMax: number) => Math.ceil(dataMax * 1.1),
-                      ]}
+                      domain={[0, maxChartValue]}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `${value.toLocaleString()}`}
