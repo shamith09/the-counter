@@ -366,8 +366,8 @@ export default function StatsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const rateOfChangeData =
-    history.length > 1
+  const rateOfChangeData = useMemo(() => {
+    return history.length > 1
       ? [...history]
           .reverse()
           .slice(1)
@@ -387,6 +387,7 @@ export default function StatsPage() {
             };
           })
       : [];
+  }, [history, selectedTimeRange]);
 
   const mapPoints = useMemo(() => {
     return countryStats.map((stat) => ({
@@ -414,8 +415,8 @@ export default function StatsPage() {
 
     // Add a 20% buffer to each maximum
     return {
-      valueChartMax: Math.ceil(maxCount * 1.2),
-      rateChartMax: Math.ceil(maxRate * 1.2) || 10, // Fallback to 10 if maxRate is 0
+      valueChartMax: Math.ceil(maxCount * 1.1),
+      rateChartMax: Math.ceil(maxRate * 1.1) || 10, // Fallback to 10 if maxRate is 0
     };
   }, [history, rateOfChangeData]);
 
