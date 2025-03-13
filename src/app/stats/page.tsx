@@ -171,7 +171,7 @@ export default function StatsPage() {
   const [leaderboard, setLeaderboard] = useState<UserStats[]>([]);
   const [countryStats, setCountryStats] = useState<CountryStats[]>([]);
   const [history, setHistory] = useState<CounterHistory[]>([]);
-  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>("all");
+  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>("week");
   const [showPayPalSetup, setShowPayPalSetup] = useState(false);
   const [hasPayPalSetup, setHasPayPalSetup] = useState(false);
   const [payoutInfo, setPayoutInfo] = useState<PayoutInfo | null>(null);

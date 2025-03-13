@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       INSERT INTO counter_history (count, timestamp, granularity, start_count, end_count, avg_count, min_count, max_count)
       SELECT 
         (array_agg(count ORDER BY timestamp DESC))[1] as count,
-        date_trunc('day', timestamp) as day_timestamp,
+        date_trunc('day', timestamp) + INTERVAL '1 day' - INTERVAL '1 second' as day_timestamp,
         'daily' as granularity,
         (array_agg(count ORDER BY timestamp ASC))[1] as start_count,
         (array_agg(count ORDER BY timestamp DESC))[1] as end_count,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         granularity = 'hourly' AND
         timestamp >= date_trunc('day', NOW() - INTERVAL '1 day') AND
         timestamp < date_trunc('day', NOW())
-      GROUP BY day_timestamp
+      GROUP BY date_trunc('day', timestamp)
       ON CONFLICT (timestamp, granularity)
       DO UPDATE SET 
         count = EXCLUDED.count,
