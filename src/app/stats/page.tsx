@@ -388,9 +388,9 @@ export default function StatsPage() {
   // Prepare history data for the charts in chronological order (oldest to newest)
   const chartData = useMemo(() => [...history].reverse(), [history]);
 
-  // Calculate max value for chart scaling with a generous buffer
-  const maxChartValue = useMemo(() => {
-    if (history.length === 0) return 100;
+  // Calculate max values for chart scaling with generous buffers
+  const { valueChartMax, rateChartMax } = useMemo(() => {
+    if (history.length === 0) return { valueChartMax: 100, rateChartMax: 100 };
 
     // Find the maximum count value in the history data
     const maxCount = Math.max(...history.map((item) => item.count));
@@ -401,9 +401,11 @@ export default function StatsPage() {
         ? Math.max(...rateOfChangeData.map((item) => item.rate))
         : 0;
 
-    // Use the larger of the two maximums and add a 20% buffer
-    const overallMax = Math.max(maxCount, maxRate);
-    return overallMax;
+    // Add a 20% buffer to each maximum
+    return {
+      valueChartMax: Math.ceil(maxCount * 1.2),
+      rateChartMax: Math.ceil(maxRate * 1.2) || 10, // Fallback to 10 if maxRate is 0
+    };
   }, [history, rateOfChangeData]);
 
   const distributionData = useMemo(() => {
@@ -915,7 +917,7 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[0, maxChartValue]}
+                      domain={[0, valueChartMax]}
                       tickLine={false}
                       axisLine={false}
                     />
@@ -984,7 +986,7 @@ export default function StatsPage() {
                       }
                     />
                     <YAxis
-                      domain={[0, maxChartValue]}
+                      domain={[0, rateChartMax]}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(value) => `${value.toLocaleString()}`}
