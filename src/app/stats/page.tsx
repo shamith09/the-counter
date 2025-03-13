@@ -403,7 +403,7 @@ export default function StatsPage() {
 
     // Use the larger of the two maximums and add a 20% buffer
     const overallMax = Math.max(maxCount, maxRate);
-    return Math.ceil(overallMax * 1.2);
+    return overallMax;
   }, [history, rateOfChangeData]);
 
   const distributionData = useMemo(() => {
