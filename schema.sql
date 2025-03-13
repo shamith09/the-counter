@@ -10,11 +10,13 @@ CREATE TABLE viewers (
     client_id TEXT UNIQUE NOT NULL,
     last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ip_address INET,
-    user_agent TEXT
+    user_agent TEXT,
+    server_instance_id UUID
 );
 
 CREATE INDEX viewers_last_seen_idx ON viewers(last_seen);
 CREATE INDEX viewers_client_id_idx ON viewers(client_id);
+CREATE INDEX viewers_server_instance_idx ON viewers(server_instance_id);
 
 -- Grant permissions to production user
 GRANT ALL PRIVILEGES ON TABLE viewers TO neondb_owner;
