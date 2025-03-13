@@ -799,8 +799,10 @@ export default function StatsPage() {
               <TableBody>
                 {countryStats.map((country, index) => (
                   <TableRow key={country.country_code}>
-                    <TableCell className="font-medium">{index + 1}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium text-purple-200">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="text-purple-200">
                       <div className="flex items-center gap-2">
                         <span
                           className={`fi fi-${country.country_code.toLowerCase()}`}
@@ -808,10 +810,10 @@ export default function StatsPage() {
                         {country.country_name}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-purple-200">
                       {country.total_value_added.toLocaleString()}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-purple-200">
                       {formatDistanceToNow(new Date(country.last_increment), {
                         addSuffix: true,
                       })}
@@ -826,7 +828,9 @@ export default function StatsPage() {
 
       <Card className="border-purple-500/20 bg-black/50 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="text-purple-300">Counter Analytics</CardTitle>
+          <CardTitle className="text-purple-300">
+            Counter Analytics (updates every minute)
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
