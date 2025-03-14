@@ -48,32 +48,42 @@ export async function GET(request: NextRequest) {
           WITH combined_activity AS (
             -- Data from daily aggregates
             SELECT 
-              user_id
+              user_id,
+              SUM(total_value_added) as total_value_added
             FROM user_activity_daily
             GROUP BY user_id
             
-            UNION
+            UNION ALL
             
             -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
             SELECT 
-              user_id
+              user_id,
+              SUM(total_value_added) as total_value_added
             FROM user_activity_hourly
             WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
             GROUP BY user_id
             
-            UNION
+            UNION ALL
             
             -- Data from raw activity (for very recent data that might not be aggregated yet)
             SELECT 
-              user_id
+              user_id,
+              SUM(value_diff) as total_value_added
             FROM user_activity
             WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM combined_activity
             GROUP BY user_id
           )
           SELECT COUNT(DISTINCT u.id) as total
           FROM users u
-          JOIN combined_activity ca ON u.id = ca.user_id
-          WHERE u.username IS NOT NULL
+          JOIN user_totals ut ON u.id = ut.user_id
+          WHERE u.username IS NOT NULL AND ut.total_value_added > 0
         `;
         const countResult = await sql(countQuery);
 
@@ -230,10 +240,12 @@ export async function GET(request: NextRequest) {
           FROM users u
           JOIN (
             SELECT 
-              user_id
+              user_id,
+              SUM(value_diff) as total_value_added
             FROM user_activity
             WHERE created_at > NOW() - INTERVAL '1 HOUR'
             GROUP BY user_id
+            HAVING SUM(value_diff) > 0
           ) tws ON u.id = tws.user_id
           WHERE u.username IS NOT NULL
         `;
@@ -323,22 +335,38 @@ export async function GET(request: NextRequest) {
       // For daily data (last 24 hours), combine hourly aggregates and recent raw activity
       try {
         const countQuery = `
-          WITH combined_users AS (
-            -- Users from hourly aggregates
-            SELECT user_id FROM user_activity_hourly
+          WITH combined_activity AS (
+            -- Data from hourly aggregates
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM user_activity_hourly
             WHERE hour_timestamp > NOW() - INTERVAL '24 HOURS'
+            GROUP BY user_id
             
-            UNION
+            UNION ALL
             
-            -- Users from raw activity (for recent data that might not be aggregated yet)
-            SELECT user_id FROM user_activity
-            WHERE created_at > NOW() - INTERVAL '24 HOURS'
-            AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            -- Data from raw activity (for recent data that might not be aggregated yet)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added
+            FROM user_activity
+            WHERE 
+              created_at > NOW() - INTERVAL '24 HOURS'
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM combined_activity
+            GROUP BY user_id
           )
           SELECT COUNT(DISTINCT u.id) as total
           FROM users u
-          JOIN combined_users cu ON u.id = cu.user_id
-          WHERE u.username IS NOT NULL
+          JOIN user_totals ut ON u.id = ut.user_id
+          WHERE u.username IS NOT NULL AND ut.total_value_added > 0
         `;
         const countResult = await sql(countQuery);
 
@@ -490,31 +518,50 @@ export async function GET(request: NextRequest) {
 
       try {
         const countQuery = `
-          WITH combined_users AS (
-            -- Users from daily aggregates
-            SELECT user_id FROM user_activity_daily
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM user_activity_daily
             WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            GROUP BY user_id
             
-            UNION
+            UNION ALL
             
-            -- Users from hourly aggregates (for recent data that might not be in daily aggregates yet)
-            SELECT user_id FROM user_activity_hourly
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM user_activity_hourly
             WHERE 
               hour_timestamp > NOW() - INTERVAL '${interval}'
               AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY user_id
             
-            UNION
+            UNION ALL
             
-            -- Users from raw activity (for very recent data that might not be aggregated yet)
-            SELECT user_id FROM user_activity
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added
+            FROM user_activity
             WHERE 
               created_at > NOW() - INTERVAL '${interval}'
               AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added
+            FROM combined_activity
+            GROUP BY user_id
           )
           SELECT COUNT(DISTINCT u.id) as total
           FROM users u
-          JOIN combined_users cu ON u.id = cu.user_id
-          WHERE u.username IS NOT NULL
+          JOIN user_totals ut ON u.id = ut.user_id
+          WHERE u.username IS NOT NULL AND ut.total_value_added > 0
         `;
         const countResult = await sql(countQuery);
 
