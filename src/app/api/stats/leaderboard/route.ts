@@ -86,16 +86,9 @@ export async function GET(request: NextRequest) {
 
       result = await sql(intervalQuery);
     } else if (timeRange === "day") {
-      // For daily data (last 24 hours), use a direct approach with no overlapping data
+      // For daily data (last 24 hours), use only raw activity data
       const intervalQuery = `
-        WITH daily_cutoff AS (
-          SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
-        ),
-        hourly_cutoff AS (
-          SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
-        ),
-        raw_activity AS (
-          -- Recent raw activity (not yet in hourly aggregates)
+        WITH time_window_stats AS (
           SELECT 
             user_id,
             SUM(value_diff) as total_value_added,
@@ -103,61 +96,20 @@ export async function GET(request: NextRequest) {
             MAX(created_at) as last_increment
           FROM user_activity
           WHERE created_at > NOW() - INTERVAL '24 HOURS'
-            AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
-          GROUP BY user_id
-        ),
-        hourly_activity AS (
-          -- Hourly aggregated data (not in daily aggregates)
-          SELECT 
-            user_id,
-            SUM(total_value_added) as total_value_added,
-            SUM(increment_count) as increment_count,
-            MAX(hour_timestamp) as last_increment
-          FROM user_activity_hourly
-          WHERE hour_timestamp > NOW() - INTERVAL '24 HOURS'
-            AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
-          GROUP BY user_id
-        ),
-        daily_activity AS (
-          -- Daily aggregated data for today only
-          SELECT 
-            user_id,
-            total_value_added,
-            increment_count,
-            day_timestamp as last_increment
-          FROM user_activity_daily
-          WHERE day_timestamp > NOW() - INTERVAL '24 HOURS'
-        ),
-        combined_data AS (
-          -- Combine the datasets with UNION ALL (no overlap)
-          SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
-          UNION ALL
-          SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
-          UNION ALL
-          SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
-        ),
-        user_totals AS (
-          -- Aggregate the combined data
-          SELECT 
-            user_id,
-            SUM(total_value_added) as total_value_added,
-            SUM(increment_count) as increment_count,
-            MAX(last_increment) as last_increment
-          FROM combined_data
           GROUP BY user_id
         )
         SELECT 
           u.id, 
           u.username, 
-          COALESCE(ut.increment_count, 0) as increment_count, 
-          COALESCE(ut.total_value_added, 0) as total_value_added,
-          ut.last_increment
+          COALESCE(tws.increment_count, 0) as increment_count, 
+          COALESCE(tws.total_value_added, 0) as total_value_added,
+          tws.last_increment
         FROM 
           users u
-        LEFT JOIN user_totals ut ON u.id = ut.user_id
+        LEFT JOIN time_window_stats tws ON u.id = tws.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(ut.total_value_added, 0) > 0
+          COALESCE(tws.total_value_added, 0) > 0
         ORDER BY 
           total_value_added DESC`;
 
@@ -167,92 +119,200 @@ export async function GET(request: NextRequest) {
       timeRange === "month" ||
       timeRange === "year"
     ) {
-      // For weekly, monthly, and yearly data, use a direct approach with no overlapping data
+      // For weekly, monthly, and yearly data
       let interval;
       if (timeRange === "week") {
         interval = "7 DAYS";
+
+        // For week, use only raw activity data
+        const weekQuery = `
+          WITH time_window_stats AS (
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added,
+              COUNT(*) as increment_count,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE created_at > NOW() - INTERVAL '7 DAYS'
+            GROUP BY user_id
+          )
+          SELECT 
+            u.id, 
+            u.username, 
+            COALESCE(tws.increment_count, 0) as increment_count, 
+            COALESCE(tws.total_value_added, 0) as total_value_added,
+            tws.last_increment
+          FROM 
+            users u
+          LEFT JOIN time_window_stats tws ON u.id = tws.user_id
+          WHERE 
+            u.username IS NOT NULL AND
+            COALESCE(tws.total_value_added, 0) > 0
+          ORDER BY 
+            total_value_added DESC`;
+
+        result = await sql(weekQuery);
       } else if (timeRange === "month") {
         interval = "30 DAYS";
+
+        // For month and year, use the combined approach
+        const intervalQuery = `
+          WITH daily_cutoff AS (
+            SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
+          ),
+          hourly_cutoff AS (
+            SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
+          ),
+          raw_activity AS (
+            -- Recent raw activity (not yet in hourly aggregates)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added,
+              COUNT(*) as increment_count,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE created_at > NOW() - INTERVAL '${interval}'
+              AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
+            GROUP BY user_id
+          ),
+          hourly_activity AS (
+            -- Hourly aggregated data (not in daily aggregates)
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
+              AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
+            GROUP BY user_id
+          ),
+          daily_activity AS (
+            -- Daily aggregated data for the period
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(day_timestamp) as last_increment
+            FROM user_activity_daily
+            WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            GROUP BY user_id
+          ),
+          combined_data AS (
+            -- Combine the datasets with UNION ALL (no overlap)
+            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
+            UNION ALL
+            SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
+            UNION ALL
+            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
+          ),
+          user_totals AS (
+            -- Aggregate the combined data
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(last_increment) as last_increment
+            FROM combined_data
+            GROUP BY user_id
+          )
+          SELECT 
+            u.id, 
+            u.username, 
+            COALESCE(ut.increment_count, 0) as increment_count, 
+            COALESCE(ut.total_value_added, 0) as total_value_added,
+            ut.last_increment
+          FROM 
+            users u
+          LEFT JOIN user_totals ut ON u.id = ut.user_id
+          WHERE 
+            u.username IS NOT NULL AND
+            COALESCE(ut.total_value_added, 0) > 0
+          ORDER BY 
+            total_value_added DESC`;
+
+        result = await sql(intervalQuery);
       } else {
         interval = "365 DAYS";
+
+        // For month and year, use the combined approach
+        const intervalQuery = `
+          WITH daily_cutoff AS (
+            SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
+          ),
+          hourly_cutoff AS (
+            SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
+          ),
+          raw_activity AS (
+            -- Recent raw activity (not yet in hourly aggregates)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added,
+              COUNT(*) as increment_count,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE created_at > NOW() - INTERVAL '${interval}'
+              AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
+            GROUP BY user_id
+          ),
+          hourly_activity AS (
+            -- Hourly aggregated data (not in daily aggregates)
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
+              AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
+            GROUP BY user_id
+          ),
+          daily_activity AS (
+            -- Daily aggregated data for the period
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(day_timestamp) as last_increment
+            FROM user_activity_daily
+            WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            GROUP BY user_id
+          ),
+          combined_data AS (
+            -- Combine the datasets with UNION ALL (no overlap)
+            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
+            UNION ALL
+            SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
+            UNION ALL
+            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
+          ),
+          user_totals AS (
+            -- Aggregate the combined data
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(last_increment) as last_increment
+            FROM combined_data
+            GROUP BY user_id
+          )
+          SELECT 
+            u.id, 
+            u.username, 
+            COALESCE(ut.increment_count, 0) as increment_count, 
+            COALESCE(ut.total_value_added, 0) as total_value_added,
+            ut.last_increment
+          FROM 
+            users u
+          LEFT JOIN user_totals ut ON u.id = ut.user_id
+          WHERE 
+            u.username IS NOT NULL AND
+            COALESCE(ut.total_value_added, 0) > 0
+          ORDER BY 
+            total_value_added DESC`;
+
+        result = await sql(intervalQuery);
       }
-
-      const intervalQuery = `
-        WITH daily_cutoff AS (
-          SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
-        ),
-        hourly_cutoff AS (
-          SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
-        ),
-        raw_activity AS (
-          -- Recent raw activity (not yet in hourly aggregates)
-          SELECT 
-            user_id,
-            SUM(value_diff) as total_value_added,
-            COUNT(*) as increment_count,
-            MAX(created_at) as last_increment
-          FROM user_activity
-          WHERE created_at > NOW() - INTERVAL '${interval}'
-            AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
-          GROUP BY user_id
-        ),
-        hourly_activity AS (
-          -- Hourly aggregated data (not in daily aggregates)
-          SELECT 
-            user_id,
-            SUM(total_value_added) as total_value_added,
-            SUM(increment_count) as increment_count,
-            MAX(hour_timestamp) as last_increment
-          FROM user_activity_hourly
-          WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
-            AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
-          GROUP BY user_id
-        ),
-        daily_activity AS (
-          -- Daily aggregated data for the period
-          SELECT 
-            user_id,
-            SUM(total_value_added) as total_value_added,
-            SUM(increment_count) as increment_count,
-            MAX(day_timestamp) as last_increment
-          FROM user_activity_daily
-          WHERE day_timestamp > NOW() - INTERVAL '${interval}'
-          GROUP BY user_id
-        ),
-        combined_data AS (
-          -- Combine the datasets with UNION ALL (no overlap)
-          SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
-          UNION ALL
-          SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
-          UNION ALL
-          SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
-        ),
-        user_totals AS (
-          -- Aggregate the combined data
-          SELECT 
-            user_id,
-            SUM(total_value_added) as total_value_added,
-            SUM(increment_count) as increment_count,
-            MAX(last_increment) as last_increment
-          FROM combined_data
-          GROUP BY user_id
-        )
-        SELECT 
-          u.id, 
-          u.username, 
-          COALESCE(ut.increment_count, 0) as increment_count, 
-          COALESCE(ut.total_value_added, 0) as total_value_added,
-          ut.last_increment
-        FROM 
-          users u
-        LEFT JOIN user_totals ut ON u.id = ut.user_id
-        WHERE 
-          u.username IS NOT NULL AND
-          COALESCE(ut.total_value_added, 0) > 0
-        ORDER BY 
-          total_value_added DESC`;
-
-      result = await sql(intervalQuery);
     }
 
     // Format the response to match the expected structure
