@@ -164,7 +164,7 @@ const PaymentForm = ({
       if (error) {
         console.error("Payment error:", error);
       } else if (paymentIntent.status === "succeeded") {
-        onSuccess(amount, paymentIntent.id);
+        onSuccess(numValue, paymentIntent.id);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -539,6 +539,7 @@ export default function Home() {
     }
 
     try {
+      console.log("Creating payment intent with amount:", paymentAmount);
       const response = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -857,7 +858,10 @@ export default function Home() {
                   <PaymentForm
                     onSuccess={handlePaymentSuccess}
                     amount={paymentAmount}
-                    setAmount={setPaymentAmount}
+                    setAmount={(newAmount) => {
+                      console.log("Setting payment amount to:", newAmount);
+                      setPaymentAmount(newAmount);
+                    }}
                   />
                 </Elements>
               )}

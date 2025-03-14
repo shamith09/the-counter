@@ -193,6 +193,79 @@ def post_weekly_winner():
             conn.close()
 
 
+@app.function(
+    secrets=[secrets],
+    schedule=modal.Cron("0 0 * * 0"),  # Run at 12:00 AM every Sunday (24 hours before)
+    timeout=60,
+)
+def post_winner_reminder_24h():
+    """Post a reminder that a new winner will be announced in 24 hours."""
+    import tweepy
+
+    logger.info("Posting 24-hour winner reminder...")
+
+    try:
+        # Set up tweepy client with OAuth 1.0a
+        client = tweepy.Client(
+            bearer_token=os.environ["TWITTER_BEARER_TOKEN"],
+            consumer_key=os.environ["TWITTER_API_KEY"],
+            consumer_secret=os.environ["TWITTER_API_KEY_SECRET"],
+            access_token=os.environ["TWITTER_ACCESS_TOKEN"],
+            access_token_secret=os.environ["TWITTER_ACCESS_TOKEN_SECRET"],
+        )
+
+        # Create tweet text
+        tweet_text = (
+            "🚨 24 HOURS REMAINING 🚨\n\n"
+            "Our weekly winner will be announced in 24 hours!\n\n"
+            "Keep incrementing at thecounter [.] live for your chance to win!\n\nhttps://thecounter.live"
+        )
+
+        # Post tweet
+        response = client.create_tweet(text=tweet_text)
+
+        logger.info(f"24-hour reminder tweeted successfully: {response}")
+    except Exception as e:
+        logger.error(f"Error in post_winner_reminder_24h: {e}")
+
+
+@app.function(
+    secrets=[secrets],
+    schedule=modal.Cron("0 23 * * 0"),  # Run at 11:00 PM every Sunday (1 hour before)
+    timeout=60,
+)
+def post_winner_reminder_1h():
+    """Post a reminder that a new winner will be announced in 1 hour."""
+    import tweepy
+
+    logger.info("Posting 1-hour winner reminder...")
+
+    try:
+        # Set up tweepy client with OAuth 1.0a
+        client = tweepy.Client(
+            bearer_token=os.environ["TWITTER_BEARER_TOKEN"],
+            consumer_key=os.environ["TWITTER_API_KEY"],
+            consumer_secret=os.environ["TWITTER_API_KEY_SECRET"],
+            access_token=os.environ["TWITTER_ACCESS_TOKEN"],
+            access_token_secret=os.environ["TWITTER_ACCESS_TOKEN_SECRET"],
+        )
+
+        # Create tweet text
+        tweet_text = (
+            "⏰ 1 HOUR REMAINING ⏰\n\n"
+            "Our weekly winner will be announced in just 1 hour!\n\n"
+            "Last chance to increment at thecounter [.] live for your chance to win!\n\n"
+            "https://thecounter.live"
+        )
+
+        # Post tweet
+        response = client.create_tweet(text=tweet_text)
+
+        logger.info(f"1-hour reminder tweeted successfully: {response}")
+    except Exception as e:
+        logger.error(f"Error in post_winner_reminder_1h: {e}")
+
+
 def format_large_number(number_str):
     """Format a large number for display in a tweet."""
     try:
