@@ -3,11 +3,6 @@ import { db, sql } from "@/lib/db";
 import { getServerSession } from "next-auth";
 
 // Define types for database results
-interface DatabaseResult {
-  rows?: LeaderboardRow[];
-  [key: string]: unknown;
-}
-
 interface LeaderboardRow {
   id: number;
   username: string;
@@ -66,20 +61,59 @@ export async function GET(request: NextRequest) {
       // Get user's rank if logged in
       if (currentUserId) {
         try {
-          const rankResult = await db.query(
-            db.sql`
+          const rankQuery = `
+            WITH combined_activity AS (
+              -- Data from daily aggregates
               SELECT 
-                (
-                  SELECT COUNT(*) + 1
-                  FROM user_stats
-                  WHERE total_value_added > (SELECT total_value_added FROM user_stats WHERE user_id = ${currentUserId})
-                ) as rank
-            `,
-          );
+                user_id,
+                SUM(total_value_added) as total_value_added
+              FROM user_activity_daily
+              GROUP BY user_id
+              
+              UNION ALL
+              
+              -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+              SELECT 
+                user_id,
+                SUM(total_value_added) as total_value_added
+              FROM user_activity_hourly
+              WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+              GROUP BY user_id
+              
+              UNION ALL
+              
+              -- Data from raw activity (for very recent data that might not be aggregated yet)
+              SELECT 
+                user_id,
+                SUM(value_diff) as total_value_added
+              FROM user_activity
+              WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+              GROUP BY user_id
+            ),
+            user_totals AS (
+              SELECT 
+                user_id,
+                SUM(total_value_added) as total_value_added
+              FROM combined_activity
+              GROUP BY user_id
+            ),
+            user_ranks AS (
+              SELECT 
+                user_id,
+                RANK() OVER (ORDER BY total_value_added DESC) as rank
+              FROM user_totals
+            )
+            SELECT rank
+            FROM user_ranks
+            WHERE user_id = '${currentUserId}'
+          `;
+          const rankResult = await sql(rankQuery);
 
           if (
             rankResult &&
-            rankResult.rows &&
+            typeof rankResult === "object" &&
+            "rows" in rankResult &&
+            Array.isArray(rankResult.rows) &&
             rankResult.rows.length > 0 &&
             rankResult.rows[0].rank
           ) {
@@ -91,24 +125,67 @@ export async function GET(request: NextRequest) {
       }
 
       // Get leaderboard data
-      result = (await db.sql`
+      const allTimeQuery = `
+        WITH combined_activity AS (
+          -- Data from daily aggregates
+          SELECT 
+            user_id,
+            SUM(total_value_added) as total_value_added,
+            SUM(increment_count) as increment_count,
+            MAX(day_timestamp) as last_increment
+          FROM user_activity_daily
+          GROUP BY user_id
+          
+          UNION ALL
+          
+          -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+          SELECT 
+            user_id,
+            SUM(total_value_added) as total_value_added,
+            SUM(increment_count) as increment_count,
+            MAX(hour_timestamp) as last_increment
+          FROM user_activity_hourly
+          WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+          GROUP BY user_id
+          
+          UNION ALL
+          
+          -- Data from raw activity (for very recent data that might not be aggregated yet)
+          SELECT 
+            user_id,
+            SUM(value_diff) as total_value_added,
+            COUNT(*) as increment_count,
+            MAX(created_at) as last_increment
+          FROM user_activity
+          WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          GROUP BY user_id
+        ),
+        user_totals AS (
+          SELECT 
+            user_id,
+            SUM(total_value_added) as total_value_added,
+            SUM(increment_count) as increment_count,
+            MAX(last_increment) as last_increment
+          FROM combined_activity
+          GROUP BY user_id
+        )
         SELECT 
           u.id, 
           u.username, 
-          COALESCE(us.increment_count, 0) as increment_count, 
-          COALESCE(us.increment_count, 0) as total_value_added,
-          us.last_increment
+          COALESCE(ut.increment_count, 0) as increment_count, 
+          COALESCE(ut.total_value_added, 0) as total_value_added,
+          ut.last_increment
         FROM 
           users u
-        LEFT JOIN user_stats us ON u.id = us.user_id
+        LEFT JOIN user_totals ut ON u.id = ut.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(us.increment_count, 0) > 0
+          COALESCE(ut.increment_count, 0) > 0
         ORDER BY 
           total_value_added DESC
-        LIMIT ${pageSize} OFFSET ${offset}`) as unknown as
-        | LeaderboardRow[]
-        | DatabaseResult;
+        LIMIT ${pageSize} OFFSET ${offset}`;
+
+      result = await sql(allTimeQuery);
     } else if (timeRange === "hour") {
       // For hourly data, query directly from user_activity
       try {

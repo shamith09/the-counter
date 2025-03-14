@@ -675,7 +675,7 @@ export async function GET(request: Request) {
         db.sql`
           SELECT 
             increment_count,
-            increment_count as total_value_added,
+            total_value_added,
             last_increment,
             streak_days,
             longest_streak,

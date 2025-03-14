@@ -29,10 +29,12 @@ export async function GET(request: NextRequest) {
           cs.country_code, 
           cs.country_name, 
           cs.increment_count, 
-          cs.increment_count as total_value_added,
+          COALESCE(SUM(ca.value_diff), 0) as total_value_added,
           cs.last_increment 
         FROM country_stats cs
+        LEFT JOIN country_activity ca ON cs.country_code = ca.country_code
         WHERE cs.increment_count > 0
+        GROUP BY cs.country_code, cs.country_name, cs.increment_count, cs.last_increment
         ORDER BY total_value_added DESC`) as unknown as
         | CountryRow[]
         | DatabaseResult;
@@ -190,10 +192,12 @@ export async function GET(request: NextRequest) {
           cs.country_code, 
           cs.country_name, 
           cs.increment_count, 
-          cs.increment_count as total_value_added,
+          COALESCE(SUM(ca.value_diff), 0) as total_value_added,
           cs.last_increment 
         FROM country_stats cs
+        LEFT JOIN country_activity ca ON cs.country_code = ca.country_code
         WHERE cs.increment_count > 0
+        GROUP BY cs.country_code, cs.country_name, cs.increment_count, cs.last_increment
         ORDER BY total_value_added DESC`) as unknown as
         | CountryRow[]
         | DatabaseResult;
