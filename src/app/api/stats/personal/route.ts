@@ -670,8 +670,20 @@ export async function GET(request: Request) {
         `,
       );
 
-      // Use the stats from user_stats table directly
-      rangeStatsResult = statsResult;
+      // Use the stats from user_stats table directly, but use increment_count for total_value_added
+      rangeStatsResult = await db.query(
+        db.sql`
+          SELECT 
+            increment_count,
+            increment_count as total_value_added,
+            last_increment,
+            streak_days,
+            longest_streak,
+            last_streak_date
+          FROM user_stats
+          WHERE user_id = ${userId}
+        `,
+      );
 
       // Get daily activity from daily aggregates for a better overview
       dailyActivityResult = await db.query(

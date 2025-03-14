@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
           u.id, 
           u.username, 
           COALESCE(us.increment_count, 0) as increment_count, 
-          COALESCE(us.total_value_added, 0) as total_value_added,
+          COALESCE(us.increment_count, 0) as total_value_added,
           us.last_increment
         FROM 
           users u
