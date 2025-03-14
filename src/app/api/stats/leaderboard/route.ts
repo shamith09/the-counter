@@ -18,9 +18,6 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "10");
 
-    // Calculate offset for pagination
-    const offset = (page - 1) * pageSize;
-
     // Get the current user's ID if they're logged in
     const session = await getServerSession();
     let currentUserId = null;
@@ -38,139 +35,10 @@ export async function GET(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
-    let totalUsers = 0;
 
-    // Get total count for pagination and leaderboard data based on time range
+    // Get leaderboard data based on time range - without pagination limits
     if (!timeRange || timeRange === "all") {
-      // For "all time" queries, use the user_stats table
-      try {
-        const countQuery = `
-          WITH combined_users AS (
-            -- Users from user_stats
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_stats us ON u.id = us.user_id
-            WHERE u.username IS NOT NULL AND us.total_value_added > 0
-            
-            UNION
-            
-            -- Users from daily aggregates
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity_daily uad ON u.id = uad.user_id
-            WHERE u.username IS NOT NULL AND uad.total_value_added > 0
-            
-            UNION
-            
-            -- Users from hourly aggregates
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity_hourly uah ON u.id = uah.user_id
-            WHERE u.username IS NOT NULL AND uah.total_value_added > 0
-            
-            UNION
-            
-            -- Users from raw activity
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity ua ON u.id = ua.user_id
-            WHERE u.username IS NOT NULL AND ua.value_diff > 0
-          )
-          SELECT COUNT(*) as total FROM combined_users
-        `;
-        const countResult = await sql(countQuery);
-
-        console.log(
-          `Count query for ${timeRange || "all-time"} returned:`,
-          countResult,
-        );
-
-        if (
-          countResult &&
-          typeof countResult === "object" &&
-          "rows" in countResult &&
-          Array.isArray(countResult.rows) &&
-          countResult.rows.length > 0 &&
-          countResult.rows[0].total
-        ) {
-          totalUsers = parseInt(countResult.rows[0].total);
-        } else {
-          totalUsers = 0;
-        }
-
-        console.log("All-time count query result:", countResult);
-      } catch (error) {
-        console.error("Error getting total count:", error);
-        totalUsers = 0;
-      }
-
-      // Get user's rank if logged in
-      if (currentUserId) {
-        try {
-          const rankQuery = `
-            WITH combined_activity AS (
-              -- Data from daily aggregates
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM user_activity_daily
-              GROUP BY user_id
-              
-              UNION ALL
-              
-              -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM user_activity_hourly
-              WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
-              GROUP BY user_id
-              
-              UNION ALL
-              
-              -- Data from raw activity (for very recent data that might not be aggregated yet)
-              SELECT 
-                user_id,
-                SUM(value_diff) as total_value_added
-              FROM user_activity
-              WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
-              GROUP BY user_id
-            ),
-            user_totals AS (
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM combined_activity
-              GROUP BY user_id
-            ),
-            user_ranks AS (
-              SELECT 
-                user_id,
-                RANK() OVER (ORDER BY total_value_added DESC) as rank
-              FROM user_totals
-            )
-            SELECT rank
-            FROM user_ranks
-            WHERE user_id = '${currentUserId}'
-          `;
-          const rankResult = await sql(rankQuery);
-
-          if (
-            rankResult &&
-            typeof rankResult === "object" &&
-            "rows" in rankResult &&
-            Array.isArray(rankResult.rows) &&
-            rankResult.rows.length > 0 &&
-            rankResult.rows[0].rank
-          ) {
-            userRank = parseInt(String(rankResult.rows[0].rank));
-          }
-        } catch (error) {
-          console.error("Error getting user rank:", error);
-        }
-      }
-
-      // Get leaderboard data
+      // For "all time" queries, use combined data from all sources
       const allTimeQuery = `
         WITH combined_activity AS (
           -- Data from daily aggregates
@@ -228,84 +96,11 @@ export async function GET(request: NextRequest) {
           u.username IS NOT NULL AND
           COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
-          total_value_added DESC
-        LIMIT ${pageSize} OFFSET ${offset}`;
+          total_value_added DESC`;
 
       result = await sql(allTimeQuery);
     } else if (timeRange === "hour") {
       // For hourly data, query directly from user_activity
-      try {
-        const countQuery = `
-          WITH combined_users AS (
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity ua ON u.id = ua.user_id
-            WHERE 
-              u.username IS NOT NULL 
-              AND ua.created_at > NOW() - INTERVAL '1 HOUR'
-              AND ua.value_diff > 0
-          )
-          SELECT COUNT(*) as total FROM combined_users
-        `;
-        const countResult = await sql(countQuery);
-
-        console.log(
-          `Count query for ${timeRange || "hourly"} returned:`,
-          countResult,
-        );
-
-        if (
-          countResult &&
-          typeof countResult === "object" &&
-          "rows" in countResult &&
-          Array.isArray(countResult.rows) &&
-          countResult.rows.length > 0 &&
-          countResult.rows[0].total
-        ) {
-          totalUsers = parseInt(countResult.rows[0].total);
-        } else {
-          totalUsers = 0;
-        }
-      } catch (error) {
-        console.error("Error getting total count:", error);
-        totalUsers = 0;
-      }
-
-      // Get user's rank if logged in
-      if (currentUserId) {
-        try {
-          const rankQuery = `
-            WITH user_ranks AS (
-              SELECT 
-                user_id,
-                SUM(value_diff) as total_value_added,
-                RANK() OVER (ORDER BY SUM(value_diff) DESC) as rank
-              FROM user_activity
-              WHERE created_at > NOW() - INTERVAL '1 HOUR'
-              GROUP BY user_id
-            )
-            SELECT rank
-            FROM user_ranks
-            WHERE user_id = '${currentUserId}'
-          `;
-          const rankResult = await sql(rankQuery);
-
-          if (
-            rankResult &&
-            typeof rankResult === "object" &&
-            "rows" in rankResult &&
-            Array.isArray(rankResult.rows) &&
-            rankResult.rows.length > 0 &&
-            rankResult.rows[0].rank
-          ) {
-            userRank = parseInt(String(rankResult.rows[0].rank));
-          }
-        } catch (error) {
-          console.error("Error getting user rank:", error);
-        }
-      }
-
-      // Get leaderboard data
       const intervalQuery = `
         WITH time_window_stats AS (
           SELECT 
@@ -330,120 +125,11 @@ export async function GET(request: NextRequest) {
           u.username IS NOT NULL AND
           COALESCE(tws.total_value_added, 0) > 0
         ORDER BY 
-          total_value_added DESC
-        LIMIT ${pageSize} OFFSET ${offset}`;
+          total_value_added DESC`;
 
       result = await sql(intervalQuery);
     } else if (timeRange === "day") {
-      // For "day" queries, use the user_activity_hourly table for the last 24 hours
-      try {
-        const countQuery = `
-          WITH combined_users AS (
-            -- Users from hourly aggregates
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity_hourly uah ON u.id = uah.user_id
-            WHERE u.username IS NOT NULL 
-            AND uah.hour_timestamp >= NOW() - INTERVAL '24 hours'
-            AND uah.total_value_added > 0
-            
-            UNION
-            
-            -- Users from raw activity
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity ua ON u.id = ua.user_id
-            WHERE u.username IS NOT NULL 
-            AND ua.created_at >= NOW() - INTERVAL '24 hours'
-            AND ua.value_diff > 0
-          )
-          SELECT COUNT(DISTINCT id) as total FROM combined_users
-        `;
-        const countResult = await sql(countQuery);
-
-        console.log(
-          `Count query for ${timeRange || "daily"} returned:`,
-          countResult,
-        );
-
-        if (
-          countResult &&
-          typeof countResult === "object" &&
-          "rows" in countResult &&
-          Array.isArray(countResult.rows) &&
-          countResult.rows.length > 0 &&
-          countResult.rows[0].total
-        ) {
-          totalUsers = parseInt(countResult.rows[0].total);
-        } else {
-          totalUsers = 0;
-        }
-      } catch (error) {
-        console.error("Error getting total count:", error);
-        totalUsers = 0;
-      }
-
-      // Get user's rank if logged in
-      if (currentUserId) {
-        try {
-          const rankQuery = `
-            WITH combined_activity AS (
-              -- Data from hourly aggregates
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM user_activity_hourly
-              WHERE hour_timestamp > NOW() - INTERVAL '24 HOURS'
-              GROUP BY user_id
-              
-              UNION ALL
-              
-              -- Data from raw activity (for recent data that might not be aggregated yet)
-              SELECT 
-                user_id,
-                SUM(value_diff) as total_value_added
-              FROM user_activity
-              WHERE 
-                created_at > NOW() - INTERVAL '24 HOURS'
-                -- Exclude data that's already been aggregated to avoid double counting
-                AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
-              GROUP BY user_id
-            ),
-            user_totals AS (
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM combined_activity
-              GROUP BY user_id
-            ),
-            user_ranks AS (
-              SELECT 
-                user_id,
-                RANK() OVER (ORDER BY total_value_added DESC) as rank
-              FROM user_totals
-            )
-            SELECT rank
-            FROM user_ranks
-            WHERE user_id = '${currentUserId}'
-          `;
-          const rankResult = await sql(rankQuery);
-
-          if (
-            rankResult &&
-            typeof rankResult === "object" &&
-            "rows" in rankResult &&
-            Array.isArray(rankResult.rows) &&
-            rankResult.rows.length > 0 &&
-            rankResult.rows[0].rank
-          ) {
-            userRank = parseInt(String(rankResult.rows[0].rank));
-          }
-        } catch (error) {
-          console.error("Error getting user rank:", error);
-        }
-      }
-
-      // Get leaderboard data
+      // For daily data (last 24 hours), combine hourly aggregates and recent raw activity
       const intervalQuery = `
         WITH combined_activity AS (
           -- Data from hourly aggregates
@@ -493,8 +179,7 @@ export async function GET(request: NextRequest) {
           u.username IS NOT NULL AND
           COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
-          total_value_added DESC
-        LIMIT ${pageSize} OFFSET ${offset}`;
+          total_value_added DESC`;
 
       result = await sql(intervalQuery);
     } else if (
@@ -502,143 +187,16 @@ export async function GET(request: NextRequest) {
       timeRange === "month" ||
       timeRange === "year"
     ) {
-      // For "week", "month", and "year" queries, use the appropriate interval
-      const intervalMap = {
-        week: "7 days",
-        month: "30 days",
-        year: "365 days",
-      };
-      const interval = intervalMap[timeRange as keyof typeof intervalMap];
-
-      try {
-        const countQuery = `
-          WITH combined_users AS (
-            -- Users from daily aggregates
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity_daily uad ON u.id = uad.user_id
-            WHERE u.username IS NOT NULL 
-            AND uad.day_timestamp >= NOW() - INTERVAL '${interval}'
-            AND uad.total_value_added > 0
-            
-            UNION
-            
-            -- Users from hourly aggregates
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity_hourly uah ON u.id = uah.user_id
-            WHERE u.username IS NOT NULL 
-            AND uah.hour_timestamp >= NOW() - INTERVAL '${interval}'
-            AND uah.total_value_added > 0
-            
-            UNION
-            
-            -- Users from raw activity
-            SELECT DISTINCT u.id
-            FROM users u
-            JOIN user_activity ua ON u.id = ua.user_id
-            WHERE u.username IS NOT NULL 
-            AND ua.created_at >= NOW() - INTERVAL '${interval}'
-            AND ua.value_diff > 0
-          )
-          SELECT COUNT(*) as total FROM combined_users
-        `;
-        const countResult = await sql(countQuery);
-
-        console.log(
-          `Count query for ${timeRange || "weekly"} returned:`,
-          countResult,
-        );
-
-        if (
-          countResult &&
-          typeof countResult === "object" &&
-          "rows" in countResult &&
-          Array.isArray(countResult.rows) &&
-          countResult.rows.length > 0 &&
-          countResult.rows[0].total
-        ) {
-          totalUsers = parseInt(countResult.rows[0].total);
-        } else {
-          totalUsers = 0;
-        }
-      } catch (error) {
-        console.error("Error getting total count:", error);
-        totalUsers = 0;
+      // For weekly, monthly, and yearly data, combine daily aggregates, hourly aggregates, and recent raw activity
+      let interval;
+      if (timeRange === "week") {
+        interval = "7 DAYS";
+      } else if (timeRange === "month") {
+        interval = "30 DAYS";
+      } else {
+        interval = "365 DAYS";
       }
 
-      // Get user's rank if logged in
-      if (currentUserId) {
-        try {
-          const rankQuery = `
-            WITH combined_activity AS (
-              -- Data from daily aggregates
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM user_activity_daily
-              WHERE day_timestamp > NOW() - INTERVAL '${interval}'
-              GROUP BY user_id
-              
-              UNION ALL
-              
-              -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM user_activity_hourly
-              WHERE 
-                hour_timestamp > NOW() - INTERVAL '${interval}'
-                AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
-              GROUP BY user_id
-              
-              UNION ALL
-              
-              -- Data from raw activity (for very recent data that might not be aggregated yet)
-              SELECT 
-                user_id,
-                SUM(value_diff) as total_value_added
-              FROM user_activity
-              WHERE 
-                created_at > NOW() - INTERVAL '${interval}'
-                AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
-              GROUP BY user_id
-            ),
-            user_totals AS (
-              SELECT 
-                user_id,
-                SUM(total_value_added) as total_value_added
-              FROM combined_activity
-              GROUP BY user_id
-            ),
-            user_ranks AS (
-              SELECT 
-                user_id,
-                RANK() OVER (ORDER BY total_value_added DESC) as rank
-              FROM user_totals
-            )
-            SELECT rank
-            FROM user_ranks
-            WHERE user_id = '${currentUserId}'
-          `;
-          const rankResult = await sql(rankQuery);
-
-          if (
-            rankResult &&
-            typeof rankResult === "object" &&
-            "rows" in rankResult &&
-            Array.isArray(rankResult.rows) &&
-            rankResult.rows.length > 0 &&
-            rankResult.rows[0].rank
-          ) {
-            userRank = parseInt(String(rankResult.rows[0].rank));
-          }
-        } catch (error) {
-          console.error("Error getting user rank:", error);
-        }
-      }
-
-      // Get leaderboard data
       const intervalQuery = `
         WITH combined_activity AS (
           -- Data from daily aggregates
@@ -701,81 +259,75 @@ export async function GET(request: NextRequest) {
           u.username IS NOT NULL AND
           COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
-          total_value_added DESC
-        LIMIT ${pageSize} OFFSET ${offset}`;
+          total_value_added DESC`;
 
       result = await sql(intervalQuery);
     }
 
     // Format the response to match the expected structure
     const resultData = Array.isArray(result) ? result : result.rows || [];
-    const users = resultData.map((row: LeaderboardRow, index: number) => ({
-      id: row.id,
-      username: row.username,
-      increment_count:
-        typeof row.increment_count === "string"
-          ? parseInt(row.increment_count)
-          : row.increment_count,
-      total_value_added:
-        typeof row.total_value_added === "string"
-          ? parseInt(row.total_value_added)
-          : row.total_value_added,
-      last_increment: row.last_increment,
-      rank: (page - 1) * pageSize + index + 1, // Calculate rank based on pagination
-    }));
 
-    try {
-      // Ensure totalUsers is a valid number
-      if (isNaN(totalUsers) || totalUsers < 0) {
-        console.error("Invalid totalUsers value:", totalUsers);
-        totalUsers = 0;
-      }
+    // Filter out users with zero or negative total_value_added
+    const allUsers = resultData
+      .filter((row: LeaderboardRow) => {
+        const totalValueAdded =
+          typeof row.total_value_added === "string"
+            ? parseInt(row.total_value_added)
+            : row.total_value_added;
+        return totalValueAdded > 0;
+      })
+      .map((row: LeaderboardRow, index: number) => ({
+        id: row.id,
+        username: row.username,
+        increment_count:
+          typeof row.increment_count === "string"
+            ? parseInt(row.increment_count)
+            : row.increment_count,
+        total_value_added:
+          typeof row.total_value_added === "string"
+            ? parseInt(row.total_value_added)
+            : row.total_value_added,
+        last_increment: row.last_increment,
+        rank: index + 1, // Calculate rank based on overall position
+      }));
 
-      const calculatedTotalPages = Math.max(
-        1,
-        Math.ceil(totalUsers / pageSize),
+    // Calculate user rank if logged in
+    if (currentUserId) {
+      const userIndex = allUsers.findIndex(
+        (user: { id: number | string }) => user.id === currentUserId,
       );
-
-      const response = {
-        users: users,
-        pagination: {
-          page,
-          pageSize,
-          totalPages: calculatedTotalPages,
-          totalUsers,
-        },
-        currentUser: {
-          id: currentUserId,
-          rank: userRank,
-        },
-      };
-
-      console.log("Final response pagination:", response.pagination);
-      console.log("Total users found:", totalUsers);
-      console.log("Calculated total pages:", calculatedTotalPages);
-      console.log("Users returned:", users.length);
-
-      return NextResponse.json(response);
-    } catch (error) {
-      console.error("Error calculating pagination:", error);
-
-      // Fallback response with default pagination
-      const response = {
-        users: users,
-        pagination: {
-          page: 1,
-          pageSize: pageSize,
-          totalPages: 1,
-          totalUsers: users.length,
-        },
-        currentUser: {
-          id: currentUserId,
-          rank: userRank,
-        },
-      };
-
-      return NextResponse.json(response);
+      if (userIndex !== -1) {
+        userRank = userIndex + 1;
+      }
     }
+
+    // Handle pagination in TypeScript
+    const totalUsers = allUsers.length;
+    const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalUsers);
+    const paginatedUsers = allUsers.slice(startIndex, endIndex);
+
+    console.log("Total users found:", totalUsers);
+    console.log("Calculated total pages:", totalPages);
+    console.log("Users returned:", paginatedUsers.length);
+    console.log("Current page:", page);
+
+    const response = {
+      users: paginatedUsers,
+      pagination: {
+        page,
+        pageSize,
+        totalPages,
+        totalUsers,
+      },
+      currentUser: {
+        id: currentUserId,
+        rank: userRank,
+      },
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error getting leaderboard:", error);
     return NextResponse.json(
