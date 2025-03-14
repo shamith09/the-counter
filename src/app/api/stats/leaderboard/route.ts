@@ -45,12 +45,45 @@ export async function GET(request: NextRequest) {
       // For "all time" queries, use the user_stats table
       try {
         const countQuery = `
-          SELECT COUNT(DISTINCT u.id) as total
-          FROM users u
-          JOIN user_stats us ON u.id = us.user_id
-          WHERE u.username IS NOT NULL AND us.increment_count > 0
+          WITH combined_users AS (
+            -- Users from user_stats
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_stats us ON u.id = us.user_id
+            WHERE u.username IS NOT NULL AND us.total_value_added > 0
+            
+            UNION
+            
+            -- Users from daily aggregates
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity_daily uad ON u.id = uad.user_id
+            WHERE u.username IS NOT NULL AND uad.total_value_added > 0
+            
+            UNION
+            
+            -- Users from hourly aggregates
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity_hourly uah ON u.id = uah.user_id
+            WHERE u.username IS NOT NULL AND uah.total_value_added > 0
+            
+            UNION
+            
+            -- Users from raw activity
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity ua ON u.id = ua.user_id
+            WHERE u.username IS NOT NULL AND ua.value_diff > 0
+          )
+          SELECT COUNT(*) as total FROM combined_users
         `;
         const countResult = await sql(countQuery);
+
+        console.log(
+          `Count query for ${timeRange || "all-time"} returned:`,
+          countResult,
+        );
 
         if (
           countResult &&
@@ -193,7 +226,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN user_totals ut ON u.id = ut.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(ut.increment_count, 0) > 0
+          COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
           total_value_added DESC
         LIMIT ${pageSize} OFFSET ${offset}`;
@@ -203,21 +236,23 @@ export async function GET(request: NextRequest) {
       // For hourly data, query directly from user_activity
       try {
         const countQuery = `
-          WITH active_users AS (
+          WITH combined_users AS (
             SELECT DISTINCT u.id
             FROM users u
             JOIN user_activity ua ON u.id = ua.user_id
             WHERE 
               u.username IS NOT NULL 
               AND ua.created_at > NOW() - INTERVAL '1 HOUR'
-            GROUP BY u.id
-            HAVING SUM(ua.value_diff) > 0
+              AND ua.value_diff > 0
           )
-          SELECT COUNT(*) as total FROM active_users
+          SELECT COUNT(*) as total FROM combined_users
         `;
         const countResult = await sql(countQuery);
 
-        console.log("Hour count query result:", countResult);
+        console.log(
+          `Count query for ${timeRange || "hourly"} returned:`,
+          countResult,
+        );
 
         if (
           countResult &&
@@ -293,34 +328,43 @@ export async function GET(request: NextRequest) {
         LEFT JOIN time_window_stats tws ON u.id = tws.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(tws.increment_count, 0) > 0
+          COALESCE(tws.total_value_added, 0) > 0
         ORDER BY 
           total_value_added DESC
         LIMIT ${pageSize} OFFSET ${offset}`;
 
       result = await sql(intervalQuery);
     } else if (timeRange === "day") {
-      // For daily data (last 24 hours), combine hourly aggregates and recent raw activity
+      // For "day" queries, use the user_activity_hourly table for the last 24 hours
       try {
         const countQuery = `
-          WITH active_users AS (
+          WITH combined_users AS (
+            -- Users from hourly aggregates
             SELECT DISTINCT u.id
             FROM users u
-            LEFT JOIN user_activity_hourly uah ON u.id = uah.user_id AND uah.hour_timestamp > NOW() - INTERVAL '24 HOURS'
-            LEFT JOIN user_activity ua ON u.id = ua.user_id AND ua.created_at > NOW() - INTERVAL '24 HOURS'
-            WHERE 
-              u.username IS NOT NULL 
-              AND (
-                (uah.user_id IS NOT NULL AND uah.total_value_added > 0)
-                OR 
-                (ua.user_id IS NOT NULL AND ua.value_diff > 0)
-              )
+            JOIN user_activity_hourly uah ON u.id = uah.user_id
+            WHERE u.username IS NOT NULL 
+            AND uah.hour_timestamp >= NOW() - INTERVAL '24 hours'
+            AND uah.total_value_added > 0
+            
+            UNION
+            
+            -- Users from raw activity
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity ua ON u.id = ua.user_id
+            WHERE u.username IS NOT NULL 
+            AND ua.created_at >= NOW() - INTERVAL '24 hours'
+            AND ua.value_diff > 0
           )
-          SELECT COUNT(*) as total FROM active_users
+          SELECT COUNT(DISTINCT id) as total FROM combined_users
         `;
         const countResult = await sql(countQuery);
 
-        console.log("Day count query result:", countResult);
+        console.log(
+          `Count query for ${timeRange || "daily"} returned:`,
+          countResult,
+        );
 
         if (
           countResult &&
@@ -447,7 +491,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN user_totals ut ON u.id = ut.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(ut.increment_count, 0) > 0
+          COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
           total_value_added DESC
         LIMIT ${pageSize} OFFSET ${offset}`;
@@ -458,39 +502,53 @@ export async function GET(request: NextRequest) {
       timeRange === "month" ||
       timeRange === "year"
     ) {
-      // For weekly, monthly, and yearly data, combine daily aggregates, hourly aggregates, and recent raw activity
-      let interval;
-      if (timeRange === "week") {
-        interval = "7 DAYS";
-      } else if (timeRange === "month") {
-        interval = "30 DAYS";
-      } else {
-        interval = "365 DAYS";
-      }
+      // For "week", "month", and "year" queries, use the appropriate interval
+      const intervalMap = {
+        week: "7 days",
+        month: "30 days",
+        year: "365 days",
+      };
+      const interval = intervalMap[timeRange as keyof typeof intervalMap];
 
       try {
         const countQuery = `
-          WITH active_users AS (
+          WITH combined_users AS (
+            -- Users from daily aggregates
             SELECT DISTINCT u.id
             FROM users u
-            LEFT JOIN user_activity_daily uad ON u.id = uad.user_id AND uad.day_timestamp > NOW() - INTERVAL '${interval}'
-            LEFT JOIN user_activity_hourly uah ON u.id = uah.user_id AND uah.hour_timestamp > NOW() - INTERVAL '${interval}'
-            LEFT JOIN user_activity ua ON u.id = ua.user_id AND ua.created_at > NOW() - INTERVAL '${interval}'
-            WHERE 
-              u.username IS NOT NULL 
-              AND (
-                (uad.user_id IS NOT NULL AND uad.total_value_added > 0)
-                OR 
-                (uah.user_id IS NOT NULL AND uah.total_value_added > 0)
-                OR 
-                (ua.user_id IS NOT NULL AND ua.value_diff > 0)
-              )
+            JOIN user_activity_daily uad ON u.id = uad.user_id
+            WHERE u.username IS NOT NULL 
+            AND uad.day_timestamp >= NOW() - INTERVAL '${interval}'
+            AND uad.total_value_added > 0
+            
+            UNION
+            
+            -- Users from hourly aggregates
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity_hourly uah ON u.id = uah.user_id
+            WHERE u.username IS NOT NULL 
+            AND uah.hour_timestamp >= NOW() - INTERVAL '${interval}'
+            AND uah.total_value_added > 0
+            
+            UNION
+            
+            -- Users from raw activity
+            SELECT DISTINCT u.id
+            FROM users u
+            JOIN user_activity ua ON u.id = ua.user_id
+            WHERE u.username IS NOT NULL 
+            AND ua.created_at >= NOW() - INTERVAL '${interval}'
+            AND ua.value_diff > 0
           )
-          SELECT COUNT(*) as total FROM active_users
+          SELECT COUNT(*) as total FROM combined_users
         `;
         const countResult = await sql(countQuery);
 
-        console.log(`${timeRange} count query result:`, countResult);
+        console.log(
+          `Count query for ${timeRange || "weekly"} returned:`,
+          countResult,
+        );
 
         if (
           countResult &&
@@ -641,7 +699,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN user_totals ut ON u.id = ut.user_id
         WHERE 
           u.username IS NOT NULL AND
-          COALESCE(ut.increment_count, 0) > 0
+          COALESCE(ut.total_value_added, 0) > 0
         ORDER BY 
           total_value_added DESC
         LIMIT ${pageSize} OFFSET ${offset}`;
@@ -666,23 +724,58 @@ export async function GET(request: NextRequest) {
       rank: (page - 1) * pageSize + index + 1, // Calculate rank based on pagination
     }));
 
-    const response = {
-      users: users,
-      pagination: {
-        page,
-        pageSize,
-        totalPages: Math.max(1, Math.ceil(totalUsers / pageSize)),
-        totalUsers,
-      },
-      currentUser: {
-        id: currentUserId,
-        rank: userRank,
-      },
-    };
+    try {
+      // Ensure totalUsers is a valid number
+      if (isNaN(totalUsers) || totalUsers < 0) {
+        console.error("Invalid totalUsers value:", totalUsers);
+        totalUsers = 0;
+      }
 
-    console.log("Final response pagination:", response.pagination);
+      const calculatedTotalPages = Math.max(
+        1,
+        Math.ceil(totalUsers / pageSize),
+      );
 
-    return NextResponse.json(response);
+      const response = {
+        users: users,
+        pagination: {
+          page,
+          pageSize,
+          totalPages: calculatedTotalPages,
+          totalUsers,
+        },
+        currentUser: {
+          id: currentUserId,
+          rank: userRank,
+        },
+      };
+
+      console.log("Final response pagination:", response.pagination);
+      console.log("Total users found:", totalUsers);
+      console.log("Calculated total pages:", calculatedTotalPages);
+      console.log("Users returned:", users.length);
+
+      return NextResponse.json(response);
+    } catch (error) {
+      console.error("Error calculating pagination:", error);
+
+      // Fallback response with default pagination
+      const response = {
+        users: users,
+        pagination: {
+          page: 1,
+          pageSize: pageSize,
+          totalPages: 1,
+          totalUsers: users.length,
+        },
+        currentUser: {
+          id: currentUserId,
+          rank: userRank,
+        },
+      };
+
+      return NextResponse.json(response);
+    }
   } catch (error) {
     console.error("Error getting leaderboard:", error);
     return NextResponse.json(
