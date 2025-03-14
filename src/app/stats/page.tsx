@@ -261,7 +261,10 @@ export default function StatsPage() {
         });
 
         setLeaderboard(leaderboardData.users || []);
-        setTotalPages(leaderboardData.pagination?.totalPages || 1);
+        const calculatedTotalPages =
+          leaderboardData.pagination?.totalPages || 1;
+        console.log("Setting totalPages to:", calculatedTotalPages);
+        setTotalPages(calculatedTotalPages);
         if (leaderboardData.currentUser?.rank) {
           setUserRank(leaderboardData.currentUser.rank);
         }
@@ -715,6 +718,13 @@ export default function StatsPage() {
           </Table>
 
           {/* Pagination controls at bottom */}
+          {(() => {
+            console.log("Pagination check:", {
+              totalPages,
+              shouldShow: totalPages > 1,
+            });
+            return null;
+          })()}
           {totalPages > 1 && (
             <div className="flex justify-center mt-6">
               <div className="inline-flex items-center justify-center gap-1 rounded-md border border-purple-500/20 bg-black/30 px-2 py-1">
