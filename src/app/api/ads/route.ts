@@ -8,7 +8,9 @@ export async function GET() {
       db.sql`
         SELECT id, content, created_at, expires_at
         FROM ads
-        WHERE active = true AND expires_at > NOW()
+        WHERE active = true 
+          AND expires_at > NOW()
+          AND payment_confirmed = true
         ORDER BY created_at DESC
       `,
     );

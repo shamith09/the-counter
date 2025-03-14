@@ -122,7 +122,8 @@ export async function POST(request: Request) {
           expires_at, 
           stripe_subscription_id, 
           stripe_customer_id,
-          auto_renew
+          auto_renew,
+          payment_confirmed
         )
         VALUES (
           ${userId}, 
@@ -131,7 +132,8 @@ export async function POST(request: Request) {
           ${expiresAt.toISOString()}, 
           ${subscription.id}, 
           ${customerId},
-          ${autoRenew}
+          ${autoRenew},
+          false
         )
       `,
     );

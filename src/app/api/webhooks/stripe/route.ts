@@ -38,7 +38,7 @@ export async function POST(request: Request) {
           await db.query(
             db.sql`
               UPDATE ads
-              SET active = true
+              SET active = true, payment_confirmed = true
               WHERE stripe_subscription_id = ${invoice.subscription}
             `,
           );
@@ -147,6 +147,22 @@ export async function POST(request: Request) {
         console.log(`Payment intent succeeded for event: ${event.id}`);
         console.log("Payment intent metadata:", paymentIntent.metadata);
 
+        // Update payment_confirmed for any ads associated with this payment intent
+        if (paymentIntent.invoice) {
+          const invoiceObj = await stripe.invoices.retrieve(
+            paymentIntent.invoice as string,
+          );
+          if (invoiceObj.subscription) {
+            await db.query(
+              db.sql`
+                UPDATE ads
+                SET payment_confirmed = true
+                WHERE stripe_subscription_id = ${invoiceObj.subscription}
+              `,
+            );
+          }
+        }
+
         // Handle renewal payments
         if (
           paymentIntent.metadata.action === "renew" &&
@@ -195,9 +211,10 @@ export async function POST(request: Request) {
                 active = true,
                 expires_at = ${expiresAt.toISOString()},
                 stripe_subscription_id = ${subscription.id},
-                auto_renew = ${autoRenew}
+                auto_renew = ${autoRenew},
+                payment_confirmed = true
               WHERE id = ${paymentIntent.metadata.adId}
-              RETURNING id, active, expires_at, stripe_subscription_id, auto_renew
+              RETURNING id, active, expires_at, stripe_subscription_id, auto_renew, payment_confirmed
             `,
           );
 
