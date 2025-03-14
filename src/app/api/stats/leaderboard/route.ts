@@ -232,6 +232,35 @@ export async function GET(request: NextRequest) {
         ) {
           totalUsers = parseInt(countResult.rows[0].total);
         }
+
+        // If no data in hourly aggregates, try raw activity data
+        if (totalUsers === 0) {
+          const rawCountQuery = `
+            SELECT COUNT(*) as total
+            FROM users u
+            LEFT JOIN (
+              SELECT 
+                user_id,
+                COUNT(*) as increment_count
+              FROM user_activity
+              WHERE created_at > NOW() - INTERVAL '24 HOURS'
+              GROUP BY user_id
+            ) tws ON u.id = tws.user_id
+            WHERE u.username IS NOT NULL AND tws.increment_count > 0
+          `;
+          const rawCountResult = await sql(rawCountQuery);
+
+          if (
+            rawCountResult &&
+            typeof rawCountResult === "object" &&
+            "rows" in rawCountResult &&
+            Array.isArray(rawCountResult.rows) &&
+            rawCountResult.rows.length > 0 &&
+            rawCountResult.rows[0].total
+          ) {
+            totalUsers = parseInt(rawCountResult.rows[0].total);
+          }
+        }
       } catch (error) {
         console.error("Error getting total count:", error);
       }
@@ -299,6 +328,40 @@ export async function GET(request: NextRequest) {
         LIMIT ${pageSize} OFFSET ${offset}`;
 
       result = await sql(intervalQuery);
+
+      // If no results from hourly aggregates, try raw activity data
+      if (
+        Array.isArray(result) ? result.length === 0 : result.rows?.length === 0
+      ) {
+        const rawIntervalQuery = `
+          WITH time_window_stats AS (
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_value_added,
+              COUNT(*) as increment_count,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE created_at > NOW() - INTERVAL '24 HOURS'
+            GROUP BY user_id
+          )
+          SELECT 
+            u.id, 
+            u.username, 
+            COALESCE(tws.increment_count, 0) as increment_count, 
+            COALESCE(tws.total_value_added, 0) as total_value_added,
+            tws.last_increment
+          FROM 
+            users u
+          LEFT JOIN time_window_stats tws ON u.id = tws.user_id
+          WHERE 
+            u.username IS NOT NULL AND
+            COALESCE(tws.increment_count, 0) > 0
+          ORDER BY 
+            total_value_added DESC
+          LIMIT ${pageSize} OFFSET ${offset}`;
+
+        result = await sql(rawIntervalQuery);
+      }
     } else if (
       timeRange === "week" ||
       timeRange === "month" ||
@@ -339,6 +402,62 @@ export async function GET(request: NextRequest) {
           countResult.rows[0].total
         ) {
           totalUsers = parseInt(countResult.rows[0].total);
+        }
+
+        // If no data in daily aggregates, try hourly aggregates
+        if (totalUsers === 0) {
+          const hourlyCountQuery = `
+            SELECT COUNT(*) as total
+            FROM users u
+            LEFT JOIN (
+              SELECT 
+                user_id,
+                SUM(increment_count) as increment_count
+              FROM user_activity_hourly
+              WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
+              GROUP BY user_id
+            ) tws ON u.id = tws.user_id
+            WHERE u.username IS NOT NULL AND tws.increment_count > 0
+          `;
+          const hourlyCountResult = await sql(hourlyCountQuery);
+
+          if (
+            hourlyCountResult &&
+            typeof hourlyCountResult === "object" &&
+            "rows" in hourlyCountResult &&
+            Array.isArray(hourlyCountResult.rows) &&
+            hourlyCountResult.rows.length > 0 &&
+            hourlyCountResult.rows[0].total
+          ) {
+            totalUsers = parseInt(hourlyCountResult.rows[0].total);
+          } else {
+            // If still no data, try raw activity data
+            const rawCountQuery = `
+              SELECT COUNT(*) as total
+              FROM users u
+              LEFT JOIN (
+                SELECT 
+                  user_id,
+                  COUNT(*) as increment_count
+                FROM user_activity
+                WHERE created_at > NOW() - INTERVAL '${interval}'
+                GROUP BY user_id
+              ) tws ON u.id = tws.user_id
+              WHERE u.username IS NOT NULL AND tws.increment_count > 0
+            `;
+            const rawCountResult = await sql(rawCountQuery);
+
+            if (
+              rawCountResult &&
+              typeof rawCountResult === "object" &&
+              "rows" in rawCountResult &&
+              Array.isArray(rawCountResult.rows) &&
+              rawCountResult.rows.length > 0 &&
+              rawCountResult.rows[0].total
+            ) {
+              totalUsers = parseInt(rawCountResult.rows[0].total);
+            }
+          }
         }
       } catch (error) {
         console.error("Error getting total count:", error);
@@ -407,6 +526,76 @@ export async function GET(request: NextRequest) {
         LIMIT ${pageSize} OFFSET ${offset}`;
 
       result = await sql(intervalQuery);
+
+      // If no results from daily aggregates, try hourly aggregates
+      if (
+        Array.isArray(result) ? result.length === 0 : result.rows?.length === 0
+      ) {
+        const hourlyIntervalQuery = `
+          WITH time_window_stats AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_value_added,
+              SUM(increment_count) as increment_count,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
+            GROUP BY user_id
+          )
+          SELECT 
+            u.id, 
+            u.username, 
+            COALESCE(tws.increment_count, 0) as increment_count, 
+            COALESCE(tws.total_value_added, 0) as total_value_added,
+            tws.last_increment
+          FROM 
+            users u
+          LEFT JOIN time_window_stats tws ON u.id = tws.user_id
+          WHERE 
+            u.username IS NOT NULL AND
+            COALESCE(tws.increment_count, 0) > 0
+          ORDER BY 
+            total_value_added DESC
+          LIMIT ${pageSize} OFFSET ${offset}`;
+
+        result = await sql(hourlyIntervalQuery);
+
+        // If still no results, try raw activity data
+        if (
+          Array.isArray(result)
+            ? result.length === 0
+            : result.rows?.length === 0
+        ) {
+          const rawIntervalQuery = `
+            WITH time_window_stats AS (
+              SELECT 
+                user_id,
+                SUM(value_diff) as total_value_added,
+                COUNT(*) as increment_count,
+                MAX(created_at) as last_increment
+              FROM user_activity
+              WHERE created_at > NOW() - INTERVAL '${interval}'
+              GROUP BY user_id
+            )
+            SELECT 
+              u.id, 
+              u.username, 
+              COALESCE(tws.increment_count, 0) as increment_count, 
+              COALESCE(tws.total_value_added, 0) as total_value_added,
+              tws.last_increment
+            FROM 
+              users u
+            LEFT JOIN time_window_stats tws ON u.id = tws.user_id
+            WHERE 
+              u.username IS NOT NULL AND
+              COALESCE(tws.increment_count, 0) > 0
+            ORDER BY 
+              total_value_added DESC
+            LIMIT ${pageSize} OFFSET ${offset}`;
+
+          result = await sql(rawIntervalQuery);
+        }
+      }
     }
 
     // Format the response to match the expected structure
