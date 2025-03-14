@@ -120,10 +120,7 @@ export async function GET(request: NextRequest) {
       timeRange === "year"
     ) {
       // For weekly, monthly, and yearly data
-      let interval;
       if (timeRange === "week") {
-        interval = "7 DAYS";
-
         // For week, use only raw activity data
         const weekQuery = `
           WITH time_window_stats AS (
@@ -153,58 +150,37 @@ export async function GET(request: NextRequest) {
 
         result = await sql(weekQuery);
       } else if (timeRange === "month") {
-        interval = "30 DAYS";
-
-        // For month and year, use the combined approach
-        const intervalQuery = `
-          WITH daily_cutoff AS (
-            SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
-          ),
-          hourly_cutoff AS (
-            SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
-          ),
-          raw_activity AS (
-            -- Recent raw activity (not yet in hourly aggregates)
+        // For month, use a simpler approach that combines raw activity with daily aggregates
+        const monthQuery = `
+          WITH raw_recent AS (
+            -- Recent raw activity (last 14 days)
             SELECT 
               user_id,
               SUM(value_diff) as total_value_added,
               COUNT(*) as increment_count,
               MAX(created_at) as last_increment
             FROM user_activity
-            WHERE created_at > NOW() - INTERVAL '${interval}'
-              AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
+            WHERE created_at > NOW() - INTERVAL '14 DAYS'
             GROUP BY user_id
           ),
-          hourly_activity AS (
-            -- Hourly aggregated data (not in daily aggregates)
-            SELECT 
-              user_id,
-              SUM(total_value_added) as total_value_added,
-              SUM(increment_count) as increment_count,
-              MAX(hour_timestamp) as last_increment
-            FROM user_activity_hourly
-            WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
-              AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
-            GROUP BY user_id
-          ),
-          daily_activity AS (
-            -- Daily aggregated data for the period
+          daily_older AS (
+            -- Daily aggregated data for older days (15-30 days ago)
             SELECT 
               user_id,
               SUM(total_value_added) as total_value_added,
               SUM(increment_count) as increment_count,
               MAX(day_timestamp) as last_increment
             FROM user_activity_daily
-            WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            WHERE 
+              day_timestamp <= NOW() - INTERVAL '14 DAYS' 
+              AND day_timestamp > NOW() - INTERVAL '30 DAYS'
             GROUP BY user_id
           ),
           combined_data AS (
-            -- Combine the datasets with UNION ALL (no overlap)
-            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
+            -- Combine recent raw data with older daily aggregates
+            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_recent
             UNION ALL
-            SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
-            UNION ALL
-            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
+            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_older
           ),
           user_totals AS (
             -- Aggregate the combined data
@@ -231,60 +207,39 @@ export async function GET(request: NextRequest) {
           ORDER BY 
             total_value_added DESC`;
 
-        result = await sql(intervalQuery);
+        result = await sql(monthQuery);
       } else {
-        interval = "365 DAYS";
-
-        // For month and year, use the combined approach
-        const intervalQuery = `
-          WITH daily_cutoff AS (
-            SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
-          ),
-          hourly_cutoff AS (
-            SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
-          ),
-          raw_activity AS (
-            -- Recent raw activity (not yet in hourly aggregates)
+        // For year, use a simpler approach that combines raw activity with daily aggregates
+        const yearQuery = `
+          WITH raw_recent AS (
+            -- Recent raw activity (last 14 days)
             SELECT 
               user_id,
               SUM(value_diff) as total_value_added,
               COUNT(*) as increment_count,
               MAX(created_at) as last_increment
             FROM user_activity
-            WHERE created_at > NOW() - INTERVAL '${interval}'
-              AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
+            WHERE created_at > NOW() - INTERVAL '14 DAYS'
             GROUP BY user_id
           ),
-          hourly_activity AS (
-            -- Hourly aggregated data (not in daily aggregates)
-            SELECT 
-              user_id,
-              SUM(total_value_added) as total_value_added,
-              SUM(increment_count) as increment_count,
-              MAX(hour_timestamp) as last_increment
-            FROM user_activity_hourly
-            WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
-              AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
-            GROUP BY user_id
-          ),
-          daily_activity AS (
-            -- Daily aggregated data for the period
+          daily_older AS (
+            -- Daily aggregated data for older days (15-365 days ago)
             SELECT 
               user_id,
               SUM(total_value_added) as total_value_added,
               SUM(increment_count) as increment_count,
               MAX(day_timestamp) as last_increment
             FROM user_activity_daily
-            WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            WHERE 
+              day_timestamp <= NOW() - INTERVAL '14 DAYS' 
+              AND day_timestamp > NOW() - INTERVAL '365 DAYS'
             GROUP BY user_id
           ),
           combined_data AS (
-            -- Combine the datasets with UNION ALL (no overlap)
-            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
+            -- Combine recent raw data with older daily aggregates
+            SELECT user_id, total_value_added, increment_count, last_increment FROM raw_recent
             UNION ALL
-            SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
-            UNION ALL
-            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
+            SELECT user_id, total_value_added, increment_count, last_increment FROM daily_older
           ),
           user_totals AS (
             -- Aggregate the combined data
@@ -311,7 +266,7 @@ export async function GET(request: NextRequest) {
           ORDER BY 
             total_value_added DESC`;
 
-        result = await sql(intervalQuery);
+        result = await sql(yearQuery);
       }
     }
 
