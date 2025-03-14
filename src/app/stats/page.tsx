@@ -404,7 +404,7 @@ export default function StatsPage() {
   const mapPoints = useMemo(() => {
     return countryStats.map((stat) => ({
       country_code: stat.country_code,
-      count: stat.increment_count,
+      count: stat.total_value_added,
       name: stat.country_name,
     }));
   }, [countryStats]);
