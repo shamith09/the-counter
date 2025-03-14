@@ -28,6 +28,12 @@ import { PayPalSetupDialog } from "@/components/paypal-setup-dialog";
 import { MarqueeAds } from "@/components/marquee-ads";
 import { AdPurchaseDialog } from "@/components/ad-purchase-dialog";
 import { CreditCard } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface FloatingNumber {
   id: number;
@@ -518,6 +524,11 @@ export default function Home() {
   );
 
   const handleMultiplyClick = async () => {
+    if (!session?.user) {
+      setError("Please sign in to use the multiply feature");
+      return;
+    }
+
     try {
       const response = await fetch("/api/create-payment-intent", {
         method: "POST",
@@ -713,6 +724,39 @@ export default function Home() {
         </div>
       </div>
 
+      {error && (
+        <div className="absolute top-20 left-0 right-0 flex justify-center z-50">
+          <div className="bg-red-900/80 text-white px-4 py-3 rounded-md flex items-center gap-3 max-w-md">
+            <div className="text-red-300">⚠️</div>
+            <div className="flex-1">{error}</div>
+            {error.includes("sign in") && !session?.user && (
+              <Button
+                onClick={() =>
+                  document
+                    .querySelector<HTMLButtonElement>(
+                      '[data-auth-button="true"]',
+                    )
+                    ?.click()
+                }
+                variant="outline"
+                className="bg-red-800 hover:bg-red-700 border-red-700"
+                size="sm"
+              >
+                Sign In
+              </Button>
+            )}
+            <Button
+              onClick={() => setError(null)}
+              variant="ghost"
+              size="sm"
+              className="p-1 h-auto text-red-300 hover:text-white hover:bg-red-800"
+            >
+              ✕
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 w-full px-4">
         <div className="mb-12 flex justify-center relative">
           <div className="absolute inset-x-0 -top-4">
@@ -745,16 +789,32 @@ export default function Home() {
             }}
           >
             <DialogTrigger asChild>
-              <Button
-                onClick={handleMultiplyClick}
-                disabled={
-                  isLoading || !socket || socket.readyState !== WebSocket.OPEN
-                }
-                className="text-xl px-8 py-6 h-auto bg-green-600 hover:bg-green-500"
-                variant="secondary"
-              >
-                Multiply
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={handleMultiplyClick}
+                      disabled={
+                        isLoading ||
+                        !socket ||
+                        socket.readyState !== WebSocket.OPEN
+                      }
+                      className="text-xl px-8 py-6 h-auto bg-green-600 hover:bg-green-500"
+                      variant="secondary"
+                    >
+                      Multiply
+                    </Button>
+                  </TooltipTrigger>
+                  {!session?.user && (
+                    <TooltipContent
+                      side="bottom"
+                      className="bg-gray-800 text-white border-gray-700"
+                    >
+                      <p>Sign in to use this feature</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             </DialogTrigger>
             <DialogContent className="bg-gray-900 text-white border-gray-800">
               <DialogHeader>

@@ -59,6 +59,7 @@ export function AuthButton() {
       variant="outline"
       onClick={() => signIn(undefined, { callbackUrl: "/" })}
       className="text-sm text-white"
+      data-auth-button="true"
     >
       Sign In
     </Button>
