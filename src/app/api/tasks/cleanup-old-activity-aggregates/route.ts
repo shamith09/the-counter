@@ -19,6 +19,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
     }
 
+    // Keep hourly user activity records for 30 days
+    const userHourlyResult = await db.query(db.sql`
+      DELETE FROM user_activity_hourly 
+      WHERE 
+        hour_timestamp < NOW() - INTERVAL '30 days'
+      RETURNING id
+    `);
+
+    const userHourlyCount = Array.isArray(userHourlyResult)
+      ? userHourlyResult.length
+      : userHourlyResult.rows.length;
+
+    // Keep hourly country activity records for 30 days
+    const countryHourlyResult = await db.query(db.sql`
+      DELETE FROM country_activity_hourly 
+      WHERE 
+        hour_timestamp < NOW() - INTERVAL '30 days'
+      RETURNING id
+    `);
+
+    const countryHourlyCount = Array.isArray(countryHourlyResult)
+      ? countryHourlyResult.length
+      : countryHourlyResult.rows.length;
+
     // Keep daily user activity records for 365 days (1 year)
     const userDailyResult = await db.query(db.sql`
       DELETE FROM user_activity_daily 
@@ -45,16 +69,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Old daily activity records cleaned up successfully",
+      message: "Old activity aggregate records cleaned up successfully",
+      userHourlyRecordsRemoved: userHourlyCount,
+      countryHourlyRecordsRemoved: countryHourlyCount,
       userDailyRecordsRemoved: userDailyCount,
       countryDailyRecordsRemoved: countryDailyCount,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Error cleaning up old daily activity records:", error);
+    console.error("Error cleaning up old activity aggregate records:", error);
     return NextResponse.json(
       {
-        message: "Error cleaning up old daily activity records",
+        message: "Error cleaning up old activity aggregate records",
         error: String(error),
       },
       { status: 500 },

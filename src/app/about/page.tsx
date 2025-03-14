@@ -55,6 +55,9 @@ export default function AboutPage() {
                 leaderboard
               </Link>
               .
+              <br />
+              <br /> The person at the top of the leaderboard each week wins $10
+              - not bad for just making a number bigger!
             </p>
           </section>
 

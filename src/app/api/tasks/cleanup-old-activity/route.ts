@@ -20,7 +20,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Keep user_activity records for 14 days (2 weeks) for accurate weekly stats
-    // This only cleans up records that are older than 14 days and haven't been aggregated yet
     const userActivityResult = await db.query(db.sql`
       DELETE FROM user_activity 
       WHERE 
@@ -33,7 +32,6 @@ export async function GET(request: NextRequest) {
       : userActivityResult.rows.length;
 
     // Keep country_activity records for 7 days
-    // This only cleans up records that are older than 7 days and haven't been aggregated yet
     const countryActivityResult = await db.query(db.sql`
       DELETE FROM country_activity 
       WHERE 
