@@ -236,6 +236,9 @@ const PaymentForm = ({
       </Button>
       <div className="text-xs text-gray-400 text-center">
         Your payment is processed securely by Stripe.
+        <div className="mt-1 text-yellow-400">
+          Note: You can only multiply once per day.
+        </div>
       </div>
     </form>
   );
@@ -358,6 +361,12 @@ export default function Home() {
           if (data.type === "error") {
             console.error("Server error:", data.count);
             setError(data.count);
+
+            // If it's a multiplication limit error, close the payment dialog
+            if (data.count.includes("you can only multiply once per day")) {
+              setShowPayment(false);
+            }
+
             // Clear error after 5 seconds
             setTimeout(() => setError(null), 5000);
           }
@@ -822,7 +831,8 @@ export default function Home() {
                   Multiply Counter
                 </DialogTitle>
                 <DialogDescription className="text-gray-400">
-                  Pay to multiply the counter by your chosen amount.
+                  Pay to multiply the counter by your chosen amount. You can
+                  only multiply once per day.
                 </DialogDescription>
               </DialogHeader>
               {clientSecret && (
