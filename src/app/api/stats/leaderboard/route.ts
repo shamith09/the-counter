@@ -44,15 +44,51 @@ export async function GET(request: NextRequest) {
     if (!timeRange || timeRange === "all") {
       // For "all time" queries, use the user_stats table
       try {
-        const countResult = await db.query(
-          db.sql`
-            SELECT COUNT(*) as total
-            FROM users u
-            LEFT JOIN user_stats us ON u.id = us.user_id
-            WHERE u.username IS NOT NULL AND us.increment_count > 0
-          `,
-        );
-        totalUsers = parseInt(String(countResult.rows[0]?.total || "0"));
+        const countQuery = `
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              user_id
+            FROM user_activity_daily
+            GROUP BY user_id
+            
+            UNION
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              user_id
+            FROM user_activity_hourly
+            WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY user_id
+            
+            UNION
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              user_id
+            FROM user_activity
+            WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          )
+          SELECT COUNT(DISTINCT u.id) as total
+          FROM users u
+          JOIN combined_activity ca ON u.id = ca.user_id
+          WHERE u.username IS NOT NULL
+        `;
+        const countResult = await sql(countQuery);
+
+        if (
+          countResult &&
+          typeof countResult === "object" &&
+          "rows" in countResult &&
+          Array.isArray(countResult.rows) &&
+          countResult.rows.length > 0 &&
+          countResult.rows[0].total
+        ) {
+          totalUsers = parseInt(countResult.rows[0].total);
+        } else {
+          totalUsers = 0;
+        }
       } catch (error) {
         console.error("Error getting total count:", error);
         totalUsers = 0;
@@ -212,9 +248,12 @@ export async function GET(request: NextRequest) {
           countResult.rows[0].total
         ) {
           totalUsers = parseInt(countResult.rows[0].total);
+        } else {
+          totalUsers = 0;
         }
       } catch (error) {
         console.error("Error getting total count:", error);
+        totalUsers = 0;
       }
 
       // Get user's rank if logged in
@@ -294,6 +333,7 @@ export async function GET(request: NextRequest) {
             -- Users from raw activity (for recent data that might not be aggregated yet)
             SELECT user_id FROM user_activity
             WHERE created_at > NOW() - INTERVAL '24 HOURS'
+            AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
           )
           SELECT COUNT(DISTINCT u.id) as total
           FROM users u
@@ -311,6 +351,8 @@ export async function GET(request: NextRequest) {
           countResult.rows[0].total
         ) {
           totalUsers = parseInt(countResult.rows[0].total);
+        } else {
+          totalUsers = 0;
         }
       } catch (error) {
         console.error("Error getting total count:", error);
@@ -485,6 +527,8 @@ export async function GET(request: NextRequest) {
           countResult.rows[0].total
         ) {
           totalUsers = parseInt(countResult.rows[0].total);
+        } else {
+          totalUsers = 0;
         }
       } catch (error) {
         console.error("Error getting total count:", error);
