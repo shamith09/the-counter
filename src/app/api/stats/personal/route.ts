@@ -66,74 +66,314 @@ export async function GET(request: Request) {
     );
 
     // Get activity for the selected time range
-    const activityResult = await db.query(
-      db.sql`
-        SELECT 
-          created_at,
-          value_diff
-        FROM user_activity
-        WHERE 
-          user_id = ${userId}
-          AND created_at >= ${startDate.toISOString()}
-        ORDER BY created_at DESC
-        LIMIT 50
-      `,
-    );
+    let activityResult;
+    let rangeStatsResult;
+    let dailyActivityResult;
+    let rankResult;
 
-    // Calculate total value added in the selected time range
-    const rangeStatsResult = await db.query(
-      db.sql`
-        SELECT 
-          COUNT(*) as increment_count,
-          SUM(value_diff) as total_value_added,
-          MAX(created_at) as last_increment
-        FROM user_activity
-        WHERE 
-          user_id = ${userId}
-          AND created_at >= ${startDate.toISOString()}
-      `,
-    );
-
-    // Calculate daily activity for the selected time range
-    const dailyActivityResult = await db.query(
-      db.sql`
-        SELECT 
-          DATE_TRUNC('day', created_at) as day,
-          COUNT(*) as count,
-          SUM(value_diff) as total_value
-        FROM user_activity
-        WHERE 
-          user_id = ${userId}
-          AND created_at >= ${startDate.toISOString()}
-        GROUP BY DATE_TRUNC('day', created_at)
-        ORDER BY day DESC
-      `,
-    );
-
-    // Get rank for the selected time range
-    const rankResult = await db.query(
-      db.sql`
-        WITH user_totals AS (
+    if (range === "hour") {
+      // For hourly data, query directly from user_activity
+      activityResult = await db.query(
+        db.sql`
           SELECT 
-            user_id,
-            SUM(value_diff) as total_added
-          FROM 
-            user_activity
+            created_at,
+            value_diff
+          FROM user_activity
           WHERE 
-            created_at >= ${startDate.toISOString()}
-          GROUP BY 
-            user_id
-        ),
-        user_ranks AS (
+            user_id = ${userId}
+            AND created_at >= ${startDate.toISOString()}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `,
+      );
+
+      rangeStatsResult = await db.query(
+        db.sql`
           SELECT 
-            user_id,
-            RANK() OVER (ORDER BY total_added DESC) as rank
-          FROM 
-            user_totals
-        )
-        SELECT rank FROM user_ranks WHERE user_id = ${userId}
-      `,
-    );
+            COUNT(*) as increment_count,
+            SUM(value_diff) as total_value_added,
+            MAX(created_at) as last_increment
+          FROM user_activity
+          WHERE 
+            user_id = ${userId}
+            AND created_at >= ${startDate.toISOString()}
+        `,
+      );
+
+      dailyActivityResult = await db.query(
+        db.sql`
+          SELECT 
+            DATE_TRUNC('day', created_at) as day,
+            COUNT(*) as count,
+            SUM(value_diff) as total_value
+          FROM user_activity
+          WHERE 
+            user_id = ${userId}
+            AND created_at >= ${startDate.toISOString()}
+          GROUP BY DATE_TRUNC('day', created_at)
+          ORDER BY day DESC
+        `,
+      );
+
+      rankResult = await db.query(
+        db.sql`
+          WITH user_totals AS (
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_added
+            FROM 
+              user_activity
+            WHERE 
+              created_at >= ${startDate.toISOString()}
+            GROUP BY 
+              user_id
+          ),
+          user_ranks AS (
+            SELECT 
+              user_id,
+              RANK() OVER (ORDER BY total_added DESC) as rank
+            FROM 
+              user_totals
+          )
+          SELECT rank FROM user_ranks WHERE user_id = ${userId}
+        `,
+      );
+    } else if (range === "day") {
+      // For daily data (last 24 hours), use hourly aggregates for stats and raw data for activity
+      activityResult = await db.query(
+        db.sql`
+          SELECT 
+            created_at,
+            value_diff
+          FROM user_activity
+          WHERE 
+            user_id = ${userId}
+            AND created_at >= ${startDate.toISOString()}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `,
+      );
+
+      rangeStatsResult = await db.query(
+        db.sql`
+          SELECT 
+            SUM(increment_count) as increment_count,
+            SUM(total_value_added) as total_value_added,
+            MAX(hour_timestamp) as last_increment
+          FROM user_activity_hourly
+          WHERE 
+            user_id = ${userId}
+            AND hour_timestamp >= ${startDate.toISOString()}
+        `,
+      );
+
+      dailyActivityResult = await db.query(
+        db.sql`
+          SELECT 
+            DATE_TRUNC('hour', hour_timestamp) as day,
+            increment_count as count,
+            total_value_added as total_value
+          FROM user_activity_hourly
+          WHERE 
+            user_id = ${userId}
+            AND hour_timestamp >= ${startDate.toISOString()}
+          ORDER BY day DESC
+        `,
+      );
+
+      rankResult = await db.query(
+        db.sql`
+          WITH user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_added
+            FROM 
+              user_activity_hourly
+            WHERE 
+              hour_timestamp >= ${startDate.toISOString()}
+            GROUP BY 
+              user_id
+          ),
+          user_ranks AS (
+            SELECT 
+              user_id,
+              RANK() OVER (ORDER BY total_added DESC) as rank
+            FROM 
+              user_totals
+          )
+          SELECT rank FROM user_ranks WHERE user_id = ${userId}
+        `,
+      );
+    } else if (range === "week" || range === "month") {
+      // For weekly/monthly data, use daily aggregates for stats and hourly for activity details
+      activityResult = await db.query(
+        db.sql`
+          SELECT 
+            hour_timestamp as created_at,
+            total_value_added as value_diff
+          FROM user_activity_hourly
+          WHERE 
+            user_id = ${userId}
+            AND hour_timestamp >= ${startDate.toISOString()}
+          ORDER BY hour_timestamp DESC
+          LIMIT 50
+        `,
+      );
+
+      rangeStatsResult = await db.query(
+        db.sql`
+          SELECT 
+            SUM(increment_count) as increment_count,
+            SUM(total_value_added) as total_value_added,
+            MAX(day_timestamp) as last_increment
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+            AND day_timestamp >= ${startDate.toISOString()}
+        `,
+      );
+
+      dailyActivityResult = await db.query(
+        db.sql`
+          SELECT 
+            day_timestamp as day,
+            increment_count as count,
+            total_value_added as total_value
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+            AND day_timestamp >= ${startDate.toISOString()}
+          ORDER BY day DESC
+        `,
+      );
+
+      rankResult = await db.query(
+        db.sql`
+          WITH user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_added
+            FROM 
+              user_activity_daily
+            WHERE 
+              day_timestamp >= ${startDate.toISOString()}
+            GROUP BY 
+              user_id
+          ),
+          user_ranks AS (
+            SELECT 
+              user_id,
+              RANK() OVER (ORDER BY total_added DESC) as rank
+            FROM 
+              user_totals
+          )
+          SELECT rank FROM user_ranks WHERE user_id = ${userId}
+        `,
+      );
+    } else if (range === "year") {
+      // For yearly data, use daily aggregates
+      activityResult = await db.query(
+        db.sql`
+          SELECT 
+            day_timestamp as created_at,
+            total_value_added as value_diff
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+            AND day_timestamp >= ${startDate.toISOString()}
+          ORDER BY day_timestamp DESC
+          LIMIT 50
+        `,
+      );
+
+      rangeStatsResult = await db.query(
+        db.sql`
+          SELECT 
+            SUM(increment_count) as increment_count,
+            SUM(total_value_added) as total_value_added,
+            MAX(day_timestamp) as last_increment
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+            AND day_timestamp >= ${startDate.toISOString()}
+        `,
+      );
+
+      // Group by month for yearly view
+      dailyActivityResult = await db.query(
+        db.sql`
+          SELECT 
+            DATE_TRUNC('month', day_timestamp) as day,
+            SUM(increment_count) as count,
+            SUM(total_value_added) as total_value
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+            AND day_timestamp >= ${startDate.toISOString()}
+          GROUP BY DATE_TRUNC('month', day_timestamp)
+          ORDER BY day DESC
+        `,
+      );
+
+      rankResult = await db.query(
+        db.sql`
+          WITH user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_added
+            FROM 
+              user_activity_daily
+            WHERE 
+              day_timestamp >= ${startDate.toISOString()}
+            GROUP BY 
+              user_id
+          ),
+          user_ranks AS (
+            SELECT 
+              user_id,
+              RANK() OVER (ORDER BY total_added DESC) as rank
+            FROM 
+              user_totals
+          )
+          SELECT rank FROM user_ranks WHERE user_id = ${userId}
+        `,
+      );
+    } else {
+      // For "all" time, use user_stats table and sample from activity
+      activityResult = await db.query(
+        db.sql`
+          SELECT 
+            created_at,
+            value_diff
+          FROM user_activity
+          WHERE 
+            user_id = ${userId}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `,
+      );
+
+      // Use the stats from user_stats table directly
+      rangeStatsResult = statsResult;
+
+      // Get daily activity from daily aggregates for a better overview
+      dailyActivityResult = await db.query(
+        db.sql`
+          SELECT 
+            day_timestamp as day,
+            increment_count as count,
+            total_value_added as total_value
+          FROM user_activity_daily
+          WHERE 
+            user_id = ${userId}
+          ORDER BY day DESC
+          LIMIT 30
+        `,
+      );
+
+      // For all-time rank, use the rank from user_stats
+      rankResult = { rows: [{ rank: statsResult.rows[0]?.rank }] };
+    }
 
     // Format the response
     let stats = null;

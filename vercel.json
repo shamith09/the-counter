@@ -19,6 +19,22 @@
     {
       "path": "/api/tasks/cleanup-old-history",
       "schedule": "15 1 * * *"
+    },
+    {
+      "path": "/api/tasks/aggregate-user-activity",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/tasks/aggregate-daily-activity",
+      "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/tasks/cleanup-old-activity",
+      "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/tasks/cleanup-old-activity-aggregates",
+      "schedule": "45 1 * * *"
     }
   ]
 }

@@ -175,11 +175,63 @@ CREATE TABLE country_activity (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Hourly aggregated activity tables
+CREATE TABLE user_activity_hourly (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    hour_timestamp TIMESTAMPTZ NOT NULL,
+    increment_count BIGINT NOT NULL,
+    total_value_added BIGINT NOT NULL,
+    UNIQUE (user_id, hour_timestamp)
+);
+
+CREATE TABLE country_activity_hourly (
+    id SERIAL PRIMARY KEY,
+    country_code CHAR(2) NOT NULL,
+    country_name VARCHAR(100) NOT NULL,
+    hour_timestamp TIMESTAMPTZ NOT NULL,
+    increment_count BIGINT NOT NULL,
+    total_value_added BIGINT NOT NULL,
+    UNIQUE (country_code, hour_timestamp)
+);
+
+-- Daily aggregated activity tables
+CREATE TABLE user_activity_daily (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    day_timestamp TIMESTAMPTZ NOT NULL,
+    increment_count BIGINT NOT NULL,
+    total_value_added BIGINT NOT NULL,
+    UNIQUE (user_id, day_timestamp)
+);
+
+CREATE TABLE country_activity_daily (
+    id SERIAL PRIMARY KEY,
+    country_code CHAR(2) NOT NULL,
+    country_name VARCHAR(100) NOT NULL,
+    day_timestamp TIMESTAMPTZ NOT NULL,
+    increment_count BIGINT NOT NULL,
+    total_value_added BIGINT NOT NULL,
+    UNIQUE (country_code, day_timestamp)
+);
+
 -- Indexes for performance
 CREATE INDEX user_activity_user_id_created_at_idx ON user_activity(user_id, created_at);
 CREATE INDEX user_activity_created_at_idx ON user_activity(created_at);
 CREATE INDEX country_activity_country_code_created_at_idx ON country_activity(country_code, created_at);
 CREATE INDEX country_activity_created_at_idx ON country_activity(created_at);
+
+-- Indexes for hourly aggregated tables
+CREATE INDEX user_activity_hourly_user_id_hour_idx ON user_activity_hourly(user_id, hour_timestamp);
+CREATE INDEX user_activity_hourly_hour_idx ON user_activity_hourly(hour_timestamp);
+CREATE INDEX country_activity_hourly_country_code_hour_idx ON country_activity_hourly(country_code, hour_timestamp);
+CREATE INDEX country_activity_hourly_hour_idx ON country_activity_hourly(hour_timestamp);
+
+-- Indexes for daily aggregated tables
+CREATE INDEX user_activity_daily_user_id_day_idx ON user_activity_daily(user_id, day_timestamp);
+CREATE INDEX user_activity_daily_day_idx ON user_activity_daily(day_timestamp);
+CREATE INDEX country_activity_daily_country_code_day_idx ON country_activity_daily(country_code, day_timestamp);
+CREATE INDEX country_activity_daily_day_idx ON country_activity_daily(day_timestamp);
 
 -- Legacy leaderboard payouts table (for historical records)
 CREATE TABLE leaderboard_payouts (
