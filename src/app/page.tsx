@@ -434,7 +434,7 @@ export default function Home() {
         ws.close(1000, "Component unmounting");
       }
     };
-  }, [retryCount]);
+  }, [retryCount, setShowPayment]);
 
   const createFloatingNumber = (
     operation: "increment" | "multiply",
