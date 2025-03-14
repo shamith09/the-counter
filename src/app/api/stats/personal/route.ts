@@ -139,7 +139,7 @@ export async function GET(request: Request) {
         `,
       );
     } else if (range === "day") {
-      // For daily data (last 24 hours), use hourly aggregates for stats and raw data for activity
+      // For daily data (last 24 hours), combine hourly aggregates and recent raw activity
       activityResult = await db.query(
         db.sql`
           SELECT 
@@ -156,184 +156,501 @@ export async function GET(request: Request) {
 
       rangeStatsResult = await db.query(
         db.sql`
+          WITH combined_activity AS (
+            -- Data from hourly aggregates
+            SELECT 
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              
+            UNION ALL
+            
+            -- Data from raw activity (for recent data that might not be aggregated yet)
+            SELECT 
+              COUNT(*) as increment_count,
+              SUM(value_diff) as total_value_added,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              -- Exclude data that's already been aggregated to avoid double counting
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          )
           SELECT 
             SUM(increment_count) as increment_count,
             SUM(total_value_added) as total_value_added,
-            MAX(hour_timestamp) as last_increment
-          FROM user_activity_hourly
-          WHERE 
-            user_id = ${userId}
-            AND hour_timestamp >= ${startDate.toISOString()}
+            MAX(last_increment) as last_increment
+          FROM combined_activity
         `,
       );
 
       dailyActivityResult = await db.query(
         db.sql`
+          WITH hourly_data AS (
+            SELECT 
+              DATE_TRUNC('hour', hour_timestamp) as day,
+              increment_count as count,
+              total_value_added as total_value
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+          ),
+          raw_data AS (
+            SELECT 
+              DATE_TRUNC('hour', created_at) as day,
+              COUNT(*) as count,
+              SUM(value_diff) as total_value
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              -- Exclude data that's already been aggregated to avoid double counting
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY DATE_TRUNC('hour', created_at)
+          ),
+          combined_data AS (
+            SELECT * FROM hourly_data
+            UNION ALL
+            SELECT * FROM raw_data
+          )
           SELECT 
-            DATE_TRUNC('hour', hour_timestamp) as day,
-            increment_count as count,
-            total_value_added as total_value
-          FROM user_activity_hourly
-          WHERE 
-            user_id = ${userId}
-            AND hour_timestamp >= ${startDate.toISOString()}
+            day,
+            SUM(count) as count,
+            SUM(total_value) as total_value
+          FROM combined_data
+          GROUP BY day
           ORDER BY day DESC
         `,
       );
 
       rankResult = await db.query(
         db.sql`
-          WITH user_totals AS (
+          WITH combined_activity AS (
+            -- Data from hourly aggregates
             SELECT 
               user_id,
               SUM(total_value_added) as total_added
-            FROM 
-              user_activity_hourly
+            FROM user_activity_hourly
+            WHERE hour_timestamp >= ${startDate.toISOString()}
+            GROUP BY user_id
+            
+            UNION ALL
+            
+            -- Data from raw activity (for recent data that might not be aggregated yet)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_added
+            FROM user_activity
             WHERE 
-              hour_timestamp >= ${startDate.toISOString()}
-            GROUP BY 
-              user_id
+              created_at >= ${startDate.toISOString()}
+              -- Exclude data that's already been aggregated to avoid double counting
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_added) as total_added
+            FROM combined_activity
+            GROUP BY user_id
           ),
           user_ranks AS (
             SELECT 
               user_id,
               RANK() OVER (ORDER BY total_added DESC) as rank
-            FROM 
-              user_totals
+            FROM user_totals
           )
           SELECT rank FROM user_ranks WHERE user_id = ${userId}
         `,
       );
     } else if (range === "week" || range === "month") {
-      // For weekly/monthly data, use daily aggregates for stats and hourly for activity details
+      // For weekly/monthly data, combine daily aggregates, hourly aggregates, and raw activity
       activityResult = await db.query(
         db.sql`
+          WITH combined_activity AS (
+            -- Data from hourly aggregates
+            SELECT 
+              hour_timestamp as created_at,
+              total_value_added as value_diff
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              
+            UNION ALL
+            
+            -- Data from raw activity (for recent data that might not be aggregated yet)
+            SELECT 
+              created_at,
+              value_diff
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              -- Exclude data that's already been aggregated to avoid double counting
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          )
           SELECT 
-            hour_timestamp as created_at,
-            total_value_added as value_diff
-          FROM user_activity_hourly
-          WHERE 
-            user_id = ${userId}
-            AND hour_timestamp >= ${startDate.toISOString()}
-          ORDER BY hour_timestamp DESC
+            created_at,
+            value_diff
+          FROM combined_activity
+          ORDER BY created_at DESC
           LIMIT 50
         `,
       );
 
       rangeStatsResult = await db.query(
         db.sql`
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(day_timestamp) as last_increment
+            FROM user_activity_daily
+            WHERE 
+              user_id = ${userId}
+              AND day_timestamp >= ${startDate.toISOString()}
+              
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+              
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              COUNT(*) as increment_count,
+              SUM(value_diff) as total_value_added,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          )
           SELECT 
             SUM(increment_count) as increment_count,
             SUM(total_value_added) as total_value_added,
-            MAX(day_timestamp) as last_increment
-          FROM user_activity_daily
-          WHERE 
-            user_id = ${userId}
-            AND day_timestamp >= ${startDate.toISOString()}
+            MAX(last_increment) as last_increment
+          FROM combined_activity
         `,
       );
 
       dailyActivityResult = await db.query(
         db.sql`
+          WITH daily_data AS (
+            SELECT 
+              day_timestamp as day,
+              increment_count as count,
+              total_value_added as total_value
+            FROM user_activity_daily
+            WHERE 
+              user_id = ${userId}
+              AND day_timestamp >= ${startDate.toISOString()}
+          ),
+          hourly_data AS (
+            SELECT 
+              DATE_TRUNC('day', hour_timestamp) as day,
+              SUM(increment_count) as count,
+              SUM(total_value_added) as total_value
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY DATE_TRUNC('day', hour_timestamp)
+          ),
+          raw_data AS (
+            SELECT 
+              DATE_TRUNC('day', created_at) as day,
+              COUNT(*) as count,
+              SUM(value_diff) as total_value
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY DATE_TRUNC('day', created_at)
+          ),
+          combined_data AS (
+            SELECT * FROM daily_data
+            UNION ALL
+            SELECT * FROM hourly_data
+            UNION ALL
+            SELECT * FROM raw_data
+          )
           SELECT 
-            day_timestamp as day,
-            increment_count as count,
-            total_value_added as total_value
-          FROM user_activity_daily
-          WHERE 
-            user_id = ${userId}
-            AND day_timestamp >= ${startDate.toISOString()}
+            day,
+            SUM(count) as count,
+            SUM(total_value) as total_value
+          FROM combined_data
+          GROUP BY day
           ORDER BY day DESC
         `,
       );
 
       rankResult = await db.query(
         db.sql`
-          WITH user_totals AS (
+          WITH combined_activity AS (
+            -- Data from daily aggregates
             SELECT 
               user_id,
               SUM(total_value_added) as total_added
-            FROM 
-              user_activity_daily
+            FROM user_activity_daily
+            WHERE day_timestamp >= ${startDate.toISOString()}
+            GROUP BY user_id
+            
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_added
+            FROM user_activity_hourly
             WHERE 
-              day_timestamp >= ${startDate.toISOString()}
-            GROUP BY 
-              user_id
+              hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY user_id
+            
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_added
+            FROM user_activity
+            WHERE 
+              created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_added) as total_added
+            FROM combined_activity
+            GROUP BY user_id
           ),
           user_ranks AS (
             SELECT 
               user_id,
               RANK() OVER (ORDER BY total_added DESC) as rank
-            FROM 
-              user_totals
+            FROM user_totals
           )
           SELECT rank FROM user_ranks WHERE user_id = ${userId}
         `,
       );
     } else if (range === "year") {
-      // For yearly data, use daily aggregates
+      // For yearly data, combine daily aggregates, hourly aggregates, and raw activity
       activityResult = await db.query(
         db.sql`
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              day_timestamp as created_at,
+              total_value_added as value_diff
+            FROM user_activity_daily
+            WHERE 
+              user_id = ${userId}
+              AND day_timestamp >= ${startDate.toISOString()}
+              
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              hour_timestamp as created_at,
+              total_value_added as value_diff
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+              
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              created_at,
+              value_diff
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          )
           SELECT 
-            day_timestamp as created_at,
-            total_value_added as value_diff
-          FROM user_activity_daily
-          WHERE 
-            user_id = ${userId}
-            AND day_timestamp >= ${startDate.toISOString()}
-          ORDER BY day_timestamp DESC
+            created_at,
+            value_diff
+          FROM combined_activity
+          ORDER BY created_at DESC
           LIMIT 50
         `,
       );
 
       rangeStatsResult = await db.query(
         db.sql`
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(day_timestamp) as last_increment
+            FROM user_activity_daily
+            WHERE 
+              user_id = ${userId}
+              AND day_timestamp >= ${startDate.toISOString()}
+              
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(hour_timestamp) as last_increment
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+              
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              COUNT(*) as increment_count,
+              SUM(value_diff) as total_value_added,
+              MAX(created_at) as last_increment
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          )
           SELECT 
             SUM(increment_count) as increment_count,
             SUM(total_value_added) as total_value_added,
-            MAX(day_timestamp) as last_increment
-          FROM user_activity_daily
-          WHERE 
-            user_id = ${userId}
-            AND day_timestamp >= ${startDate.toISOString()}
+            MAX(last_increment) as last_increment
+          FROM combined_activity
         `,
       );
 
-      // Group by month for yearly view
       dailyActivityResult = await db.query(
         db.sql`
+          WITH monthly_data AS (
+            SELECT 
+              DATE_TRUNC('month', day_timestamp) as month,
+              SUM(increment_count) as count,
+              SUM(total_value_added) as total_value
+            FROM user_activity_daily
+            WHERE 
+              user_id = ${userId}
+              AND day_timestamp >= ${startDate.toISOString()}
+            GROUP BY DATE_TRUNC('month', day_timestamp)
+          ),
+          hourly_data AS (
+            SELECT 
+              DATE_TRUNC('month', hour_timestamp) as month,
+              SUM(increment_count) as count,
+              SUM(total_value_added) as total_value
+            FROM user_activity_hourly
+            WHERE 
+              user_id = ${userId}
+              AND hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY DATE_TRUNC('month', hour_timestamp)
+          ),
+          raw_data AS (
+            SELECT 
+              DATE_TRUNC('month', created_at) as month,
+              COUNT(*) as count,
+              SUM(value_diff) as total_value
+            FROM user_activity
+            WHERE 
+              user_id = ${userId}
+              AND created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY DATE_TRUNC('month', created_at)
+          ),
+          combined_data AS (
+            SELECT * FROM monthly_data
+            UNION ALL
+            SELECT * FROM hourly_data
+            UNION ALL
+            SELECT * FROM raw_data
+          )
           SELECT 
-            DATE_TRUNC('month', day_timestamp) as day,
-            SUM(increment_count) as count,
-            SUM(total_value_added) as total_value
-          FROM user_activity_daily
-          WHERE 
-            user_id = ${userId}
-            AND day_timestamp >= ${startDate.toISOString()}
-          GROUP BY DATE_TRUNC('month', day_timestamp)
-          ORDER BY day DESC
+            month as day,
+            SUM(count) as count,
+            SUM(total_value) as total_value
+          FROM combined_data
+          GROUP BY month
+          ORDER BY month DESC
         `,
       );
 
       rankResult = await db.query(
         db.sql`
-          WITH user_totals AS (
+          WITH combined_activity AS (
+            -- Data from daily aggregates
             SELECT 
               user_id,
               SUM(total_value_added) as total_added
-            FROM 
-              user_activity_daily
+            FROM user_activity_daily
+            WHERE day_timestamp >= ${startDate.toISOString()}
+            GROUP BY user_id
+            
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              user_id,
+              SUM(total_value_added) as total_added
+            FROM user_activity_hourly
             WHERE 
-              day_timestamp >= ${startDate.toISOString()}
-            GROUP BY 
-              user_id
+              hour_timestamp >= ${startDate.toISOString()}
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            GROUP BY user_id
+            
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              user_id,
+              SUM(value_diff) as total_added
+            FROM user_activity
+            WHERE 
+              created_at >= ${startDate.toISOString()}
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            GROUP BY user_id
+          ),
+          user_totals AS (
+            SELECT 
+              user_id,
+              SUM(total_added) as total_added
+            FROM combined_activity
+            GROUP BY user_id
           ),
           user_ranks AS (
             SELECT 
               user_id,
               RANK() OVER (ORDER BY total_added DESC) as rank
-            FROM 
-              user_totals
+            FROM user_totals
           )
           SELECT rank FROM user_ranks WHERE user_id = ${userId}
         `,

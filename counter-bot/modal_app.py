@@ -29,7 +29,7 @@ secrets = modal.Secret.from_name("counter-bot-secret")
 
 @app.function(
     secrets=[secrets],
-    schedule=modal.Cron("0 */6 * * *"),  # Run every 6 hours
+    schedule=modal.Cron("0 */2 * * *"),  # Run every 2 hours
     timeout=60,
 )
 def post_counter_update():
