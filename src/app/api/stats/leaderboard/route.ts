@@ -113,17 +113,16 @@ export async function GET(request: NextRequest) {
       // For hourly data, query directly from user_activity
       try {
         const countQuery = `
-          SELECT COUNT(*) as total
+          SELECT COUNT(DISTINCT u.id) as total
           FROM users u
-          LEFT JOIN (
+          JOIN (
             SELECT 
-              user_id,
-              COUNT(*) as increment_count
+              user_id
             FROM user_activity
             WHERE created_at > NOW() - INTERVAL '1 HOUR'
             GROUP BY user_id
           ) tws ON u.id = tws.user_id
-          WHERE u.username IS NOT NULL AND tws.increment_count > 0
+          WHERE u.username IS NOT NULL
         `;
         const countResult = await sql(countQuery);
 
@@ -238,6 +237,7 @@ export async function GET(request: NextRequest) {
         }
       } catch (error) {
         console.error("Error getting total count:", error);
+        totalUsers = 0;
       }
 
       // Get user's rank if logged in
@@ -411,6 +411,7 @@ export async function GET(request: NextRequest) {
         }
       } catch (error) {
         console.error("Error getting total count:", error);
+        totalUsers = 0;
       }
 
       // Get user's rank if logged in

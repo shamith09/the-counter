@@ -254,6 +254,12 @@ export default function StatsPage() {
             payoutInfoRes.json(),
           ]);
 
+        console.log("Pagination data:", {
+          totalPages: leaderboardData.pagination?.totalPages,
+          totalUsers: leaderboardData.pagination?.totalUsers,
+          timeRange: selectedTimeRange,
+        });
+
         setLeaderboard(leaderboardData.users || []);
         setTotalPages(leaderboardData.pagination?.totalPages || 1);
         if (leaderboardData.currentUser?.rank) {
