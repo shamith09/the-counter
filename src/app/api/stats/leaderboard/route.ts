@@ -88,8 +88,14 @@ export async function GET(request: NextRequest) {
     } else if (timeRange === "day") {
       // For daily data (last 24 hours), use a direct approach with no overlapping data
       const intervalQuery = `
-        WITH raw_activity AS (
-          -- Recent raw activity (last hour or less)
+        WITH daily_cutoff AS (
+          SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
+        ),
+        hourly_cutoff AS (
+          SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
+        ),
+        raw_activity AS (
+          -- Recent raw activity (not yet in hourly aggregates)
           SELECT 
             user_id,
             SUM(value_diff) as total_value_added,
@@ -97,11 +103,11 @@ export async function GET(request: NextRequest) {
             MAX(created_at) as last_increment
           FROM user_activity
           WHERE created_at > NOW() - INTERVAL '24 HOURS'
-            AND created_at > (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
           GROUP BY user_id
         ),
         hourly_activity AS (
-          -- Hourly aggregated data for the rest of the 24 hour period
+          -- Hourly aggregated data (not in daily aggregates)
           SELECT 
             user_id,
             SUM(total_value_added) as total_value_added,
@@ -109,13 +115,26 @@ export async function GET(request: NextRequest) {
             MAX(hour_timestamp) as last_increment
           FROM user_activity_hourly
           WHERE hour_timestamp > NOW() - INTERVAL '24 HOURS'
+            AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
           GROUP BY user_id
+        ),
+        daily_activity AS (
+          -- Daily aggregated data for today only
+          SELECT 
+            user_id,
+            total_value_added,
+            increment_count,
+            day_timestamp as last_increment
+          FROM user_activity_daily
+          WHERE day_timestamp > NOW() - INTERVAL '24 HOURS'
         ),
         combined_data AS (
           -- Combine the datasets with UNION ALL (no overlap)
           SELECT user_id, total_value_added, increment_count, last_increment FROM raw_activity
           UNION ALL
           SELECT user_id, total_value_added, increment_count, last_increment FROM hourly_activity
+          UNION ALL
+          SELECT user_id, total_value_added, increment_count, last_increment FROM daily_activity
         ),
         user_totals AS (
           -- Aggregate the combined data
@@ -159,7 +178,13 @@ export async function GET(request: NextRequest) {
       }
 
       const intervalQuery = `
-        WITH raw_activity AS (
+        WITH daily_cutoff AS (
+          SELECT MAX(day_timestamp) as max_day_timestamp FROM user_activity_daily
+        ),
+        hourly_cutoff AS (
+          SELECT MAX(hour_timestamp) as max_hour_timestamp FROM user_activity_hourly
+        ),
+        raw_activity AS (
           -- Recent raw activity (not yet in hourly aggregates)
           SELECT 
             user_id,
@@ -168,11 +193,11 @@ export async function GET(request: NextRequest) {
             MAX(created_at) as last_increment
           FROM user_activity
           WHERE created_at > NOW() - INTERVAL '${interval}'
-            AND created_at > (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            AND created_at > (SELECT max_hour_timestamp FROM hourly_cutoff)
           GROUP BY user_id
         ),
         hourly_activity AS (
-          -- Hourly aggregated data (not yet in daily aggregates)
+          -- Hourly aggregated data (not in daily aggregates)
           SELECT 
             user_id,
             SUM(total_value_added) as total_value_added,
@@ -180,11 +205,11 @@ export async function GET(request: NextRequest) {
             MAX(hour_timestamp) as last_increment
           FROM user_activity_hourly
           WHERE hour_timestamp > NOW() - INTERVAL '${interval}'
-            AND hour_timestamp > (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            AND hour_timestamp > (SELECT max_day_timestamp FROM daily_cutoff)
           GROUP BY user_id
         ),
         daily_activity AS (
-          -- Daily aggregated data for the rest of the period
+          -- Daily aggregated data for the period
           SELECT 
             user_id,
             SUM(total_value_added) as total_value_added,
