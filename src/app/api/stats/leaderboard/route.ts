@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
             SUM(increment_count) as increment_count,
             MAX(hour_timestamp) as last_increment
           FROM user_activity_hourly
-          WHERE hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+          WHERE hour_timestamp > (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
           GROUP BY user_id
           
           UNION ALL
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
             COUNT(*) as increment_count,
             MAX(created_at) as last_increment
           FROM user_activity
-          WHERE created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+          WHERE created_at > (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
           GROUP BY user_id
         ),
         user_totals AS (
@@ -153,8 +153,8 @@ export async function GET(request: NextRequest) {
           FROM user_activity
           WHERE 
             created_at > NOW() - INTERVAL '24 HOURS'
-            -- Exclude data that's already been aggregated to avoid double counting
-            AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            -- Only include activity that hasn't been aggregated into hourly records
+            AND created_at > (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
           GROUP BY user_id
         ),
         user_totals AS (
@@ -220,7 +220,8 @@ export async function GET(request: NextRequest) {
           FROM user_activity_hourly
           WHERE 
             hour_timestamp > NOW() - INTERVAL '${interval}'
-            AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
+            -- Only include hours that haven't been aggregated into daily records
+            AND hour_timestamp > (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM user_activity_daily)
           GROUP BY user_id
           
           UNION ALL
@@ -234,7 +235,8 @@ export async function GET(request: NextRequest) {
           FROM user_activity
           WHERE 
             created_at > NOW() - INTERVAL '${interval}'
-            AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
+            -- Only include activity that hasn't been aggregated into hourly records
+            AND created_at > (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM user_activity_hourly)
           GROUP BY user_id
         ),
         user_totals AS (
