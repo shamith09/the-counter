@@ -579,11 +579,13 @@ export default function Home() {
     }
 
     try {
-      console.log("Creating payment intent with amount:", paymentAmount);
+      // Get the current payment amount at the time of creating the intent
+      const currentAmount = paymentAmount;
+      console.log("Creating payment intent with amount:", currentAmount);
       const response = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: paymentAmount }),
+        body: JSON.stringify({ amount: currentAmount }),
       });
 
       if (!response.ok) {
@@ -901,6 +903,68 @@ export default function Home() {
                     setAmount={(newAmount) => {
                       console.log("Setting payment amount to:", newAmount);
                       setPaymentAmount(newAmount);
+
+                      // Recreate the payment intent when the amount changes
+                      if (newAmount !== paymentAmount) {
+                        setClientSecret(null);
+                        setTimeout(() => {
+                          // Create a new payment intent with the updated amount
+                          const createNewIntent = async () => {
+                            try {
+                              console.log(
+                                "Recreating payment intent with new amount:",
+                                newAmount,
+                              );
+                              const response = await fetch(
+                                "/api/create-payment-intent",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({ amount: newAmount }),
+                                },
+                              );
+
+                              if (!response.ok) {
+                                console.error(
+                                  "Payment intent recreation failed:",
+                                  await response.text(),
+                                );
+                                setError(
+                                  "Failed to update payment amount. Please try again.",
+                                );
+                                return;
+                              }
+
+                              const { clientSecret, error } =
+                                await response.json();
+                              if (error) {
+                                console.error(
+                                  "Error recreating payment intent:",
+                                  error,
+                                );
+                                setError(
+                                  "Failed to update payment amount. Please try again.",
+                                );
+                                return;
+                              }
+
+                              setClientSecret(clientSecret);
+                            } catch (error) {
+                              console.error(
+                                "Error recreating payment intent:",
+                                error,
+                              );
+                              setError(
+                                "Failed to update payment amount. Please try again.",
+                              );
+                            }
+                          };
+
+                          createNewIntent();
+                        }, 100);
+                      }
                     }}
                   />
                 </Elements>

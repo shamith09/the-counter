@@ -258,10 +258,13 @@ CREATE TABLE payment_verifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     payment_intent_id TEXT UNIQUE NOT NULL,
     amount INTEGER NOT NULL,
+    user_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX payment_verifications_payment_intent_idx ON payment_verifications(payment_intent_id);
+CREATE INDEX payment_verifications_user_id_idx ON payment_verifications(user_id);
+CREATE INDEX payment_verifications_created_at_idx ON payment_verifications(created_at);
 
 -- Grant permissions for all tables
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neondb_owner;
