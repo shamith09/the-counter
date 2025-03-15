@@ -453,21 +453,61 @@ export default function Home() {
   // Get user's location using browser geolocation
   useEffect(() => {
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        try {
-          const response = await fetch(
-            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`,
-          );
-          const data = await response.json();
-          setLocation({
-            country_code: data.countryCode,
-            country_name: data.countryName,
-          });
-        } catch (error) {
-          console.error("Error getting location:", error);
-          setLocation({ country_code: "US", country_name: "United States" });
+      // The message in the options will appear in the browser's permission dialog
+      const options = {
+        enableHighAccuracy: false, // We don't need high accuracy for country-level data
+        timeout: 10000,
+        maximumAge: 0,
+      };
+
+      // Show a small notification to explain what's happening before the browser dialog appears
+      const notification = document.createElement("div");
+      notification.className =
+        "fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-3 rounded-md z-50 text-sm max-w-md text-center";
+      notification.innerHTML = `
+        <p>We're about to request your location for anonymous statistics only.</p>
+        <p class="text-xs mt-1 text-gray-400">This is completely optional and declining won't affect your experience.</p>
+      `;
+      document.body.appendChild(notification);
+
+      // Remove the notification after 5 seconds or when the geolocation dialog appears
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
         }
-      });
+      }, 5000);
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          // Remove notification if it's still there
+          if (document.body.contains(notification)) {
+            document.body.removeChild(notification);
+          }
+
+          try {
+            const response = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`,
+            );
+            const data = await response.json();
+            setLocation({
+              country_code: data.countryCode,
+              country_name: data.countryName,
+            });
+          } catch (error) {
+            console.error("Error getting location:", error);
+            setLocation({ country_code: "US", country_name: "United States" });
+          }
+        },
+        (error) => {
+          // Remove notification if it's still there
+          if (document.body.contains(notification)) {
+            document.body.removeChild(notification);
+          }
+
+          console.log("Geolocation permission denied or error:", error);
+        },
+        options,
+      );
     }
   }, []);
 
