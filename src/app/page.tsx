@@ -465,7 +465,7 @@ export default function Home() {
       notification.className =
         "fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-4 py-3 rounded-md z-50 text-sm max-w-md text-center";
       notification.innerHTML = `
-        <p>We're about to request your location for anonymous statistics only.</p>
+        <p>The Counter is about to request your location to show increment statistics by country.</p>
         <p class="text-xs mt-1 text-gray-400">This is completely optional and declining won't affect your experience.</p>
       `;
       document.body.appendChild(notification);
