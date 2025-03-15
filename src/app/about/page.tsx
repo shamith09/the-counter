@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import Image from "next/image";
 
 export default function AboutPage() {
   return (
@@ -102,6 +103,75 @@ export default function AboutPage() {
                 your country&apos;s count
               </li>
             </ul>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-purple-200 mb-2">
+              System Design
+            </h2>
+            <p className="mb-4">
+              The Counter may seem simple, but its architecture is designed for
+              real-time performance, scalability, and reliability. Here&apos;s
+              how it works:
+            </p>
+            <div className="flex justify-center mb-4">
+              <div className="relative w-full max-w-2xl h-80 rounded-lg overflow-hidden">
+                <Image
+                  src="/counter-system-design.png"
+                  alt="The Counter System Design Diagram"
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            </div>
+            <ul className="list-disc list-inside space-y-2">
+              <li>
+                <span className="font-medium text-purple-200">Client:</span> The
+                browser-based frontend that connects to our servers via both
+                HTTP and WebSockets
+              </li>
+              <li>
+                <span className="font-medium text-purple-200">
+                  Load Balancer:
+                </span>{" "}
+                Amazon Route 53 provides DNS-based load balancing, routing users
+                to the nearest server for minimal latency
+              </li>
+              <li>
+                <span className="font-medium text-purple-200">
+                  Next.js Server:
+                </span>{" "}
+                Handles HTTP requests for authentication, statistics, and other
+                non-realtime features
+              </li>
+              <li>
+                <span className="font-medium text-purple-200">
+                  Go WebSocket Servers:
+                </span>{" "}
+                Hosted on EC2, these maintain persistent connections with
+                clients and process counter operations
+              </li>
+              <li>
+                <span className="font-medium text-purple-200">Redis:</span>{" "}
+                Hosted on EC2, uses pub/sub for server communication and custom
+                BigNum increment scripts for atomic counter operations
+              </li>
+              <li>
+                <span className="font-medium text-purple-200">PostgreSQL:</span>{" "}
+                Stores user data, payment records, and aggregated statistics for
+                the leaderboard
+              </li>
+            </ul>
+            <p className="mt-4">
+              When you click &quot;Increment,&quot; your client sends a
+              WebSocket message through the load balancer to one of our Go
+              servers. The server executes an atomic operation on Redis and
+              broadcasts the new count to all connected clients via Redis
+              pub/sub. This architecture ensures that thousands, maybe even
+              millions, of users can increment the counter simultaneously
+              without conflicts, while maintaining a consistent experience for
+              everyone regardless of their location.
+            </p>
           </section>
 
           <section>
