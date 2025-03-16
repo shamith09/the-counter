@@ -200,7 +200,7 @@ export default function StatsPage() {
   const timeRangeLabels: Record<TimeRange, string> = {
     hour: "Last Hour",
     day: "Last 24 Hours",
-    week: "Last 7 Days",
+    week: "This Week",
     month: "Last 30 Days",
     year: "Last Year",
     all: "All Time",
@@ -634,7 +634,7 @@ export default function StatsPage() {
       <Tabs
         defaultValue={selectedTimeRange}
         onValueChange={(value) => setSelectedTimeRange(value as TimeRange)}
-        className="w-full mb-8"
+        className="w-full mb-2"
       >
         <TabsList className="bg-purple-950/50 inline-flex h-auto flex-wrap gap-2 p-2">
           {Object.entries(timeRangeLabels).map(([range, label]) => (
@@ -642,12 +642,23 @@ export default function StatsPage() {
               key={range}
               value={range}
               className="data-[state=active]:bg-purple-500 data-[state=active]:text-white px-4 py-2"
+              title={
+                range === "week"
+                  ? "Shows data from the last Monday at 12 AM UTC to now"
+                  : undefined
+              }
             >
               {label}
             </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
+
+      {selectedTimeRange === "week" && (
+        <div className="text-xs text-purple-300 mb-6 italic">
+          {`This Week shows data from Monday at 12 AM UTC to now. Weekly payouts are calculated using this time range.`}
+        </div>
+      )}
 
       {/* Leaderboard Card */}
       <Card className="border-purple-500/20 bg-black/50 backdrop-blur-sm">

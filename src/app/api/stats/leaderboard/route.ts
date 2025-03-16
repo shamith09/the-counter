@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, sql } from "@/lib/db";
 import { getServerSession } from "next-auth";
+import { getStartOfWeek } from "@/lib/utils";
 
 // Define types for database results
 interface LeaderboardRow {
@@ -121,7 +122,8 @@ export async function GET(request: NextRequest) {
     ) {
       // For weekly, monthly, and yearly data
       if (timeRange === "week") {
-        // For week, use only raw activity data
+        // For week, use the start of the current week (Monday at 12 AM UTC)
+        const startOfWeek = getStartOfWeek();
         const weekQuery = `
           WITH time_window_stats AS (
             SELECT 
@@ -130,7 +132,7 @@ export async function GET(request: NextRequest) {
               COUNT(*) as increment_count,
               MAX(created_at) as last_increment
             FROM user_activity
-            WHERE created_at > NOW() - INTERVAL '7 DAYS'
+            WHERE created_at >= '${startOfWeek.toISOString()}'
             GROUP BY user_id
           )
           SELECT 

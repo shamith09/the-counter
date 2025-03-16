@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
+import { getStartOfWeek } from "@/lib/utils";
 
 export async function GET(request: Request) {
   try {
@@ -24,8 +25,8 @@ export async function GET(request: Request) {
       startDate = new Date(now);
       startDate.setDate(now.getDate() - 1);
     } else if (range === "week") {
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 7);
+      // Use the start of the current week (Monday at 12 AM UTC)
+      startDate = getStartOfWeek();
     } else if (range === "month") {
       startDate = new Date(now);
       startDate.setMonth(now.getMonth() - 1);

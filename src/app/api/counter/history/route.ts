@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getStartOfWeek } from "@/lib/utils";
 
 // Define types for database results
 interface HistoryRow {
@@ -60,10 +61,12 @@ export async function GET(request: NextRequest) {
         break;
       case "week":
         // For weekly view, use detailed for very recent, hourly for recent, and daily for older data
+        // Use the start of the current week (Monday at 12 AM UTC)
+        const startOfWeek = getStartOfWeek();
         query = `
           WITH time_ranges AS (
             SELECT 
-              NOW() - INTERVAL '7 days' as start_time,
+              '${startOfWeek.toISOString()}'::timestamptz as start_time,
               NOW() - INTERVAL '1 day' as daily_cutoff,
               NOW() - INTERVAL '1 hour' as hourly_cutoff
           ),
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
             WHERE 
               granularity = 'daily' AND
               timestamp <= time_ranges.daily_cutoff AND
-              timestamp > time_ranges.start_time
+              timestamp >= time_ranges.start_time
           )
           SELECT * FROM detailed_data
           UNION ALL

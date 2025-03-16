@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, sql } from "@/lib/db";
+import { getStartOfWeek } from "@/lib/utils";
 
 // Define types for database results
 interface DatabaseResult {
@@ -113,76 +114,147 @@ export async function GET(request: NextRequest) {
     ) {
       // For weekly, monthly, and yearly data, combine daily aggregates, hourly aggregates, and recent raw activity
       let interval;
+      let startDate;
+
       if (timeRange === "week") {
-        interval = "7 DAYS";
+        startDate = getStartOfWeek().toISOString();
       } else if (timeRange === "month") {
         interval = "30 DAYS";
       } else {
         interval = "365 DAYS";
       }
 
-      const intervalQuery = `
-        WITH combined_activity AS (
-          -- Data from daily aggregates
+      let intervalQuery;
+
+      if (timeRange === "week") {
+        // For week, use the start of the current week (Monday at 12 AM UTC)
+        intervalQuery = `
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              country_code,
+              country_name,
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(day_timestamp) as last_increment
+            FROM country_activity_daily
+            WHERE day_timestamp >= '${startDate}'
+            GROUP BY country_code, country_name
+            
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              country_code,
+              country_name,
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(hour_timestamp) as last_increment
+            FROM country_activity_hourly
+            WHERE 
+              hour_timestamp >= '${startDate}'
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM country_activity_daily)
+            GROUP BY country_code, country_name
+            
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              country_code,
+              country_name,
+              COUNT(*) as increment_count,
+              SUM(value_diff) as total_value_added,
+              MAX(created_at) as last_increment
+            FROM country_activity
+            WHERE 
+              created_at >= '${startDate}'
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM country_activity_hourly)
+            GROUP BY country_code, country_name
+          ),
+          country_totals AS (
+            SELECT 
+              country_code,
+              MAX(country_name) as country_name, -- Use MAX to get a single value when grouping
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(last_increment) as last_increment
+            FROM combined_activity
+            GROUP BY country_code
+          )
           SELECT 
             country_code,
             country_name,
-            SUM(increment_count) as increment_count,
-            SUM(total_value_added) as total_value_added,
-            MAX(day_timestamp) as last_increment
-          FROM country_activity_daily
-          WHERE day_timestamp > NOW() - INTERVAL '${interval}'
-          GROUP BY country_code, country_name
-          
-          UNION ALL
-          
-          -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            increment_count,
+            total_value_added,
+            last_increment
+          FROM country_totals
+          WHERE increment_count > 0
+          ORDER BY total_value_added DESC`;
+      } else {
+        // For month and year, use the existing interval-based query
+        intervalQuery = `
+          WITH combined_activity AS (
+            -- Data from daily aggregates
+            SELECT 
+              country_code,
+              country_name,
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(day_timestamp) as last_increment
+            FROM country_activity_daily
+            WHERE day_timestamp > NOW() - INTERVAL '${interval}'
+            GROUP BY country_code, country_name
+            
+            UNION ALL
+            
+            -- Data from hourly aggregates (for recent data that might not be in daily aggregates yet)
+            SELECT 
+              country_code,
+              country_name,
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(hour_timestamp) as last_increment
+            FROM country_activity_hourly
+            WHERE 
+              hour_timestamp > NOW() - INTERVAL '${interval}'
+              AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM country_activity_daily)
+            GROUP BY country_code, country_name
+            
+            UNION ALL
+            
+            -- Data from raw activity (for very recent data that might not be aggregated yet)
+            SELECT 
+              country_code,
+              country_name,
+              COUNT(*) as increment_count,
+              SUM(value_diff) as total_value_added,
+              MAX(created_at) as last_increment
+            FROM country_activity
+            WHERE 
+              created_at > NOW() - INTERVAL '${interval}'
+              AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM country_activity_hourly)
+            GROUP BY country_code, country_name
+          ),
+          country_totals AS (
+            SELECT 
+              country_code,
+              MAX(country_name) as country_name, -- Use MAX to get a single value when grouping
+              SUM(increment_count) as increment_count,
+              SUM(total_value_added) as total_value_added,
+              MAX(last_increment) as last_increment
+            FROM combined_activity
+            GROUP BY country_code
+          )
           SELECT 
             country_code,
             country_name,
-            SUM(increment_count) as increment_count,
-            SUM(total_value_added) as total_value_added,
-            MAX(hour_timestamp) as last_increment
-          FROM country_activity_hourly
-          WHERE 
-            hour_timestamp > NOW() - INTERVAL '${interval}'
-            AND hour_timestamp >= (SELECT COALESCE(MAX(day_timestamp), '1970-01-01'::timestamptz) FROM country_activity_daily)
-          GROUP BY country_code, country_name
-          
-          UNION ALL
-          
-          -- Data from raw activity (for very recent data that might not be aggregated yet)
-          SELECT 
-            country_code,
-            country_name,
-            COUNT(*) as increment_count,
-            SUM(value_diff) as total_value_added,
-            MAX(created_at) as last_increment
-          FROM country_activity
-          WHERE 
-            created_at > NOW() - INTERVAL '${interval}'
-            AND created_at >= (SELECT COALESCE(MAX(hour_timestamp), '1970-01-01'::timestamptz) FROM country_activity_hourly)
-          GROUP BY country_code, country_name
-        ),
-        country_totals AS (
-          SELECT 
-            country_code,
-            MAX(country_name) as country_name, -- Use MAX to get a single value when grouping
-            SUM(increment_count) as increment_count,
-            SUM(total_value_added) as total_value_added,
-            MAX(last_increment) as last_increment
-          FROM combined_activity
-          GROUP BY country_code
-        )
-        SELECT 
-          country_code,
-          country_name,
-          increment_count,
-          total_value_added,
-          last_increment
-        FROM country_totals
-        WHERE increment_count > 0
-        ORDER BY total_value_added DESC`;
+            increment_count,
+            total_value_added,
+            last_increment
+          FROM country_totals
+          WHERE increment_count > 0
+          ORDER BY total_value_added DESC`;
+      }
 
       result = await sql(intervalQuery);
     } else {
