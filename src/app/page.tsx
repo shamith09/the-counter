@@ -785,14 +785,19 @@ export default function Home() {
         {/* Viewer count */}
         <div className="flex items-center gap-2 text-green-400">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span>
-            {viewerCount} {viewerCount === 1 ? "person" : "people"} watching
-          </span>
-          {pingTime !== null && (
-            <span className="text-purple-300 ml-2 text-sm">
-              | Ping: {pingTime}ms
+          <div className="flex items-center gap-2">
+            <span>
+              {viewerCount} {viewerCount === 1 ? "person" : "people"} watching
             </span>
-          )}
+            {pingTime !== null && (
+              <>
+                <span className="text-purple-300">|</span>
+                <span className="text-purple-300 text-sm">
+                  Ping: {pingTime}ms
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
