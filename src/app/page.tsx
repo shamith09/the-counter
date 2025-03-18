@@ -248,6 +248,7 @@ export default function Home() {
   const { data: session } = useSession();
   const [count, setCount] = useState<string | null>(null);
   const [viewerCount, setViewerCount] = useState<number>(0);
+  const [pingTime, setPingTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [floatingNumbers, setFloatingNumbers] = useState<FloatingNumber[]>([]);
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -265,6 +266,7 @@ export default function Home() {
   const [showPayPalSetup, setShowPayPalSetup] = useState(false);
   const [hasPayPalSetup, setHasPayPalSetup] = useState(false);
   const [hasAds, setHasAds] = useState(false);
+  const pingTimestampRef = useRef<number | null>(null);
 
   // WebSocket connection for counter
   useEffect(() => {
@@ -276,6 +278,7 @@ export default function Home() {
     // Define pingServer inside the effect to avoid dependency issues
     const pingServer = () => {
       if (ws && ws.readyState === WebSocket.OPEN) {
+        pingTimestampRef.current = Date.now();
         ws.send(JSON.stringify({ type: "ping" }));
       }
     };
@@ -303,6 +306,9 @@ export default function Home() {
 
         // Request viewer count immediately upon connection
         ws?.send(JSON.stringify({ type: "get_viewer_count" }));
+
+        // Initial ping to get latency
+        pingServer();
       };
 
       ws.onclose = (event) => {
@@ -315,6 +321,7 @@ export default function Home() {
         }
 
         setIsConnecting(true);
+        setPingTime(null);
 
         // Reconnect with exponential backoff
         const reconnectTimer = setTimeout(() => {
@@ -355,6 +362,14 @@ export default function Home() {
           // Handle viewer count updates
           if (data.type === "viewer_count") {
             setViewerCount(parseInt(data.count, 10));
+          }
+
+          // Handle pong responses for ping time calculation
+          if (data.type === "pong" && pingTimestampRef.current) {
+            const now = Date.now();
+            const pingMs = now - pingTimestampRef.current;
+            setPingTime(pingMs);
+            pingTimestampRef.current = null;
           }
 
           // Handle error messages
@@ -773,6 +788,11 @@ export default function Home() {
           <span>
             {viewerCount} {viewerCount === 1 ? "person" : "people"} watching
           </span>
+          {pingTime !== null && (
+            <span className="text-purple-300 ml-2 text-sm">
+              | Ping: {pingTime}ms
+            </span>
+          )}
         </div>
       </div>
 
