@@ -187,7 +187,7 @@ const PaymentForm = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-md space-y-4">
+    <form onSubmit={handleSubmit} className="w-full space-y-4">
       {(error || loadError) && (
         <div className="text-red-500 text-sm">{error || loadError}</div>
       )}
@@ -210,7 +210,24 @@ const PaymentForm = ({
           className="w-full bg-gray-800 border-gray-700 text-white focus:border-purple-500"
         />
       </div>
-      <PaymentElement onLoadError={() => setLoadError("blocked")} />
+      <div className="my-6">
+        <PaymentElement
+          onLoadError={() => setLoadError("blocked")}
+          options={{
+            layout: {
+              type: "tabs",
+              defaultCollapsed: false,
+            },
+            fields: {
+              billingDetails: {
+                address: {
+                  country: "never",
+                },
+              },
+            },
+          }}
+        />
+      </div>
       <Button
         type="submit"
         disabled={
@@ -220,7 +237,7 @@ const PaymentForm = ({
           Number(inputValue) < 1 ||
           !Number.isInteger(Number(inputValue))
         }
-        className="w-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center"
+        className="w-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center mt-6"
       >
         {isProcessing ? (
           <span className="flex items-center">
@@ -234,7 +251,7 @@ const PaymentForm = ({
           </span>
         )}
       </Button>
-      <div className="text-xs text-gray-400 text-center">
+      <div className="text-xs text-gray-400 text-center mt-4">
         Your payment is processed securely by Stripe.
         <div className="mt-1 text-yellow-400">
           Note: You can only multiply once per day.
@@ -717,28 +734,31 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center text-purple-300 overflow-hidden relative select-none py-16 sm:py-0">
-      <div className="absolute top-0 pt-4 px-4 sm:px-6 z-50 flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-2">
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+    <main className="min-h-screen flex flex-col items-center justify-center text-purple-300 overflow-hidden relative select-none">
+      <div className="absolute top-0 pt-4 px-4 sm:px-6 z-50 flex items-center justify-between w-full">
+        <div className="flex items-center gap-2">
           <AuthButton />
           <Link
             href="/stats"
-            className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+            className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+            aria-label="Stats"
           >
             <BarChart3 className="h-4 w-4" />
-            Stats
+            <span className="hidden sm:inline">Stats</span>
           </Link>
           <Link
             href="/about"
-            className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+            className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+            aria-label="About"
           >
             <Info className="h-4 w-4" />
-            About
+            <span className="hidden sm:inline">About</span>
           </Link>
           {session?.user && hasAds ? (
             <Link
               href="/my-ads"
-              className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+              className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+              aria-label="My Ads"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -757,47 +777,58 @@ export default function Home() {
                 <path d="M7 15h2" />
                 <path d="M11 15h6" />
               </svg>
-              My Ads
+              <span className="hidden sm:inline">My Ads</span>
             </Link>
           ) : (
             <></>
           )}
           {session?.user ? (
             !hasPayPalSetup && (
-              <div className="text-yellow-400 text-xs sm:text-sm flex items-center">
-                <span>⚠️ Set up PayPal</span>
+              <>
+                <div className="hidden sm:flex text-yellow-400 text-xs sm:text-sm items-center">
+                  <span>⚠️ Set up PayPal</span>
+                  <Button
+                    variant="link"
+                    className="text-yellow-400 underline ml-1 p-0 h-auto text-xs sm:text-sm"
+                    onClick={() => setShowPayPalSetup(true)}
+                  >
+                    Set up now
+                  </Button>
+                </div>
                 <Button
-                  variant="link"
-                  className="text-yellow-400 underline ml-1 p-0 h-auto text-xs sm:text-sm"
+                  variant="ghost"
+                  size="icon"
+                  className="sm:hidden h-7 w-7 p-0 text-yellow-400"
                   onClick={() => setShowPayPalSetup(true)}
+                  aria-label="Set up PayPal"
                 >
-                  Set up now
+                  ⚠️
                 </Button>
-              </div>
+              </>
             )
           ) : (
-            <div className="text-yellow-400 text-xs sm:text-sm">
+            <div className="hidden sm:block text-yellow-400 text-xs sm:text-sm">
               ⚠️ Sign in for leaderboard
             </div>
           )}
         </div>
 
         {/* Viewer count */}
-        <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <div className="flex items-center flex-wrap gap-2">
-            <span>
-              {viewerCount} {viewerCount === 1 ? "person" : "people"}
+          <span>
+            {viewerCount}
+            <span className="hidden sm:inline">
+              {" "}
+              {viewerCount === 1 ? "person" : "people"}
             </span>
-            {pingTime !== null && (
-              <>
-                <span className="text-purple-300">|</span>
-                <span className="text-purple-300">
-                  {pingTime}ms
-                </span>
-              </>
-            )}
-          </div>
+          </span>
+          {pingTime !== null && (
+            <>
+              <span className="text-purple-300">|</span>
+              <span className="text-purple-300">{pingTime}ms</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -834,7 +865,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 w-full px-4 pt-16 sm:pt-0">
+      <div className="relative z-10 w-full px-4">
         <div className="mb-8 sm:mb-12 flex justify-center relative">
           <div className="absolute inset-x-0 -top-4">
             <AnimatePresence>
@@ -846,7 +877,7 @@ export default function Home() {
           <AnimatedNumber number={count} />
         </div>
 
-        <div className="flex flex-row justify-center items-center gap-2 sm:gap-4">
+        <div className="flex flex-row justify-center items-center gap-2 sm:gap-4 mb-16 sm:mb-0">
           <Button
             onClick={() => performOperation("increment")}
             disabled={
@@ -893,8 +924,8 @@ export default function Home() {
                 </Tooltip>
               </TooltipProvider>
             </DialogTrigger>
-            <DialogContent className="bg-gray-900 text-white border-gray-800 max-w-[95vw] sm:max-w-md p-4 sm:p-6">
-              <DialogHeader>
+            <DialogContent className="bg-gray-900 text-white border-gray-800 max-w-[95vw] sm:max-w-md p-4 sm:p-6 max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
+              <DialogHeader className="sticky top-0 bg-gray-900 pt-0 pb-4 z-10">
                 <DialogTitle className="text-purple-300">
                   Multiply Counter
                 </DialogTitle>
@@ -920,51 +951,65 @@ export default function Home() {
                         borderRadius: "8px",
                       },
                     },
+                    loader: "auto",
                   }}
                 >
-                  <PaymentForm
-                    onSuccess={handlePaymentSuccess}
-                    amount={paymentAmount}
-                    setAmount={(newAmount) => {
-                      console.log("Setting payment amount to:", newAmount);
-                      setPaymentAmount(newAmount);
+                  <div className="pt-2 pb-4">
+                    <PaymentForm
+                      onSuccess={handlePaymentSuccess}
+                      amount={paymentAmount}
+                      setAmount={(newAmount) => {
+                        console.log("Setting payment amount to:", newAmount);
+                        setPaymentAmount(newAmount);
 
-                      // Recreate the payment intent when the amount changes
-                      if (newAmount !== paymentAmount) {
-                        setClientSecret(null);
-                        setTimeout(() => {
-                          // Create a new payment intent with the updated amount
-                          const createNewIntent = async () => {
-                            try {
-                              console.log(
-                                "Recreating payment intent with new amount:",
-                                newAmount,
-                              );
-                              const response = await fetch(
-                                "/api/create-payment-intent",
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
+                        // Recreate the payment intent when the amount changes
+                        if (newAmount !== paymentAmount) {
+                          setClientSecret(null);
+                          setTimeout(() => {
+                            // Create a new payment intent with the updated amount
+                            const createNewIntent = async () => {
+                              try {
+                                console.log(
+                                  "Recreating payment intent with new amount:",
+                                  newAmount,
+                                );
+                                const response = await fetch(
+                                  "/api/create-payment-intent",
+                                  {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                    },
+                                    body: JSON.stringify({ amount: newAmount }),
                                   },
-                                  body: JSON.stringify({ amount: newAmount }),
-                                },
-                              );
-
-                              if (!response.ok) {
-                                console.error(
-                                  "Payment intent recreation failed:",
-                                  await response.text(),
                                 );
-                                setError(
-                                  "Failed to update payment amount. Please try again.",
-                                );
-                                return;
-                              }
 
-                              const { clientSecret, error } =
-                                await response.json();
-                              if (error) {
+                                if (!response.ok) {
+                                  console.error(
+                                    "Payment intent recreation failed:",
+                                    await response.text(),
+                                  );
+                                  setError(
+                                    "Failed to update payment amount. Please try again.",
+                                  );
+                                  return;
+                                }
+
+                                const { clientSecret, error } =
+                                  await response.json();
+                                if (error) {
+                                  console.error(
+                                    "Error recreating payment intent:",
+                                    error,
+                                  );
+                                  setError(
+                                    "Failed to update payment amount. Please try again.",
+                                  );
+                                  return;
+                                }
+
+                                setClientSecret(clientSecret);
+                              } catch (error) {
                                 console.error(
                                   "Error recreating payment intent:",
                                   error,
@@ -972,26 +1017,15 @@ export default function Home() {
                                 setError(
                                   "Failed to update payment amount. Please try again.",
                                 );
-                                return;
                               }
+                            };
 
-                              setClientSecret(clientSecret);
-                            } catch (error) {
-                              console.error(
-                                "Error recreating payment intent:",
-                                error,
-                              );
-                              setError(
-                                "Failed to update payment amount. Please try again.",
-                              );
-                            }
-                          };
-
-                          createNewIntent();
-                        }, 100);
-                      }
-                    }}
-                  />
+                            createNewIntent();
+                          }, 100);
+                        }
+                      }}
+                    />
+                  </div>
                 </Elements>
               )}
             </DialogContent>
