@@ -79,11 +79,11 @@ const AnimatedNumber = ({ number }: { number: string }) => {
 
   const fontSize = useMemo(() => {
     const numDigits = number.length;
-    if (numDigits <= 8) return "text-8xl";
-    if (numDigits <= 12) return "text-7xl";
-    if (numDigits <= 16) return "text-6xl";
-    if (numDigits <= 20) return "text-5xl";
-    return "text-4xl";
+    if (numDigits <= 6) return "text-7xl sm:text-8xl";
+    if (numDigits <= 10) return "text-6xl sm:text-7xl";
+    if (numDigits <= 14) return "text-5xl sm:text-6xl";
+    if (numDigits <= 18) return "text-4xl sm:text-5xl";
+    return "text-3xl sm:text-4xl";
   }, [number]);
 
   return (
@@ -99,7 +99,7 @@ const AnimatedNumber = ({ number }: { number: string }) => {
 
 const FloatingText = ({ text }: { text: string }) => (
   <motion.div
-    className={`absolute left-1/2 text-xl ${
+    className={`absolute left-1/2 text-lg sm:text-xl ${
       text.includes("×") ? "text-green-500" : "text-purple-500"
     }`}
     initial={{ y: 0, x: Math.random() * 60 - 30, opacity: 1 }}
@@ -717,20 +717,20 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center text-purple-300 overflow-hidden relative select-none">
-      <div className="absolute top-0 pt-4 px-6 z-50 flex items-center justify-between w-full">
-        <div className="flex items-center gap-4">
+    <main className="min-h-screen flex flex-col items-center justify-center text-purple-300 overflow-hidden relative select-none py-16 sm:py-0">
+      <div className="absolute top-0 pt-4 px-4 sm:px-6 z-50 flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <AuthButton />
           <Link
             href="/stats"
-            className="flex items-center gap-2 rounded-md bg-transparent px-4 py-2 text-sm text-white hover:bg-purple-500/20"
+            className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
           >
             <BarChart3 className="h-4 w-4" />
             Stats
           </Link>
           <Link
             href="/about"
-            className="flex items-center gap-2 rounded-md bg-transparent px-4 py-2 text-sm text-white hover:bg-purple-500/20"
+            className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
           >
             <Info className="h-4 w-4" />
             About
@@ -738,7 +738,7 @@ export default function Home() {
           {session?.user && hasAds ? (
             <Link
               href="/my-ads"
-              className="flex items-center gap-2 rounded-md bg-transparent px-4 py-2 text-sm text-white hover:bg-purple-500/20"
+              className="flex items-center gap-1 rounded-md bg-transparent px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -764,11 +764,11 @@ export default function Home() {
           )}
           {session?.user ? (
             !hasPayPalSetup && (
-              <div className="text-yellow-400 text-sm flex items-center">
-                <span>⚠️ Set up PayPal to appear on leaderboard</span>
+              <div className="text-yellow-400 text-xs sm:text-sm flex items-center">
+                <span>⚠️ Set up PayPal</span>
                 <Button
                   variant="link"
-                  className="text-yellow-400 underline ml-2 p-0 h-auto"
+                  className="text-yellow-400 underline ml-1 p-0 h-auto text-xs sm:text-sm"
                   onClick={() => setShowPayPalSetup(true)}
                 >
                   Set up now
@@ -776,24 +776,24 @@ export default function Home() {
               </div>
             )
           ) : (
-            <div className="text-yellow-400 text-sm">
-              ⚠️ Sign in to appear on leaderboard
+            <div className="text-yellow-400 text-xs sm:text-sm">
+              ⚠️ Sign in for leaderboard
             </div>
           )}
         </div>
 
         {/* Viewer count */}
-        <div className="flex items-center gap-2 text-green-400">
+        <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm w-full sm:w-auto justify-end">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
             <span>
-              {viewerCount} {viewerCount === 1 ? "person" : "people"} watching
+              {viewerCount} {viewerCount === 1 ? "person" : "people"}
             </span>
             {pingTime !== null && (
               <>
                 <span className="text-purple-300">|</span>
-                <span className="text-purple-300 text-sm">
-                  Ping: {pingTime}ms
+                <span className="text-purple-300">
+                  {pingTime}ms
                 </span>
               </>
             )}
@@ -803,9 +803,9 @@ export default function Home() {
 
       {error && (
         <div className="absolute top-20 left-0 right-0 flex justify-center z-50">
-          <div className="bg-red-900/80 text-white px-4 py-3 rounded-md flex items-center gap-3 max-w-md">
+          <div className="bg-red-900/80 text-white px-4 py-3 rounded-md flex items-center gap-3 max-w-md mx-2">
             <div className="text-red-300">⚠️</div>
-            <div className="flex-1">{error}</div>
+            <div className="flex-1 text-sm">{error}</div>
             {error.includes("sign in") && !session?.user && (
               <Button
                 onClick={() =>
@@ -834,8 +834,8 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 w-full px-4">
-        <div className="mb-12 flex justify-center relative">
+      <div className="relative z-10 w-full px-4 pt-16 sm:pt-0">
+        <div className="mb-8 sm:mb-12 flex justify-center relative">
           <div className="absolute inset-x-0 -top-4">
             <AnimatePresence>
               {floatingNumbers.map(({ id, text }) => (
@@ -846,13 +846,13 @@ export default function Home() {
           <AnimatedNumber number={count} />
         </div>
 
-        <div className="flex flex-row justify-center items-center gap-4">
+        <div className="flex flex-row justify-center items-center gap-2 sm:gap-4">
           <Button
             onClick={() => performOperation("increment")}
             disabled={
               isLoading || !socket || socket.readyState !== WebSocket.OPEN
             }
-            className="text-xl px-8 py-6 h-auto"
+            className="text-base sm:text-xl px-4 sm:px-8 py-4 sm:py-6 h-auto"
           >
             Increment
           </Button>
@@ -876,7 +876,7 @@ export default function Home() {
                         !socket ||
                         socket.readyState !== WebSocket.OPEN
                       }
-                      className="text-xl px-8 py-6 h-auto bg-green-600 hover:bg-green-500"
+                      className="text-base sm:text-xl px-4 sm:px-8 py-4 sm:py-6 h-auto bg-green-600 hover:bg-green-500"
                       variant="secondary"
                     >
                       Multiply
@@ -893,12 +893,12 @@ export default function Home() {
                 </Tooltip>
               </TooltipProvider>
             </DialogTrigger>
-            <DialogContent className="bg-gray-900 text-white border-gray-800">
+            <DialogContent className="bg-gray-900 text-white border-gray-800 max-w-[95vw] sm:max-w-md p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle className="text-purple-300">
                   Multiply Counter
                 </DialogTitle>
-                <DialogDescription className="text-gray-400">
+                <DialogDescription className="text-gray-400 text-sm">
                   Pay to multiply the counter by your chosen amount. You can
                   only multiply once per day.
                 </DialogDescription>
@@ -1005,7 +1005,7 @@ export default function Home() {
       />
 
       {/* Ad purchase dialog */}
-      <div className="fixed bottom-8 right-4">
+      <div className="fixed bottom-4 sm:bottom-8 right-2 sm:right-4 z-10">
         <AdPurchaseDialog />
       </div>
 
