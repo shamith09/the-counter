@@ -744,7 +744,7 @@ export default function Home() {
             aria-label="Stats"
           >
             <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Stats</span>
+            <span>Stats</span>
           </Link>
           <Link
             href="/about"
@@ -752,7 +752,7 @@ export default function Home() {
             aria-label="About"
           >
             <Info className="h-4 w-4" />
-            <span className="hidden sm:inline">About</span>
+            <span>About</span>
           </Link>
           {session?.user && hasAds ? (
             <Link
@@ -777,7 +777,7 @@ export default function Home() {
                 <path d="M7 15h2" />
                 <path d="M11 15h6" />
               </svg>
-              <span className="hidden sm:inline">My Ads</span>
+              <span>My Ads</span>
             </Link>
           ) : (
             <></>
@@ -785,7 +785,7 @@ export default function Home() {
           {session?.user ? (
             !hasPayPalSetup && (
               <>
-                <div className="hidden sm:flex text-yellow-400 text-xs sm:text-sm items-center">
+                <div className="flex text-yellow-400 text-xs sm:text-sm items-center">
                   <span>⚠️ Set up PayPal</span>
                   <Button
                     variant="link"
@@ -795,19 +795,10 @@ export default function Home() {
                     Set up now
                   </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="sm:hidden h-7 w-7 p-0 text-yellow-400"
-                  onClick={() => setShowPayPalSetup(true)}
-                  aria-label="Set up PayPal"
-                >
-                  ⚠️
-                </Button>
               </>
             )
           ) : (
-            <div className="hidden sm:block text-yellow-400 text-xs sm:text-sm">
+            <div className="text-yellow-400 text-xs sm:text-sm">
               ⚠️ Sign in for leaderboard
             </div>
           )}
@@ -818,10 +809,7 @@ export default function Home() {
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <span>
             {viewerCount}
-            <span className="hidden sm:inline">
-              {" "}
-              {viewerCount === 1 ? "person" : "people"}
-            </span>
+            <span> {viewerCount === 1 ? "person" : "people"}</span>
           </span>
           {pingTime !== null && (
             <>
