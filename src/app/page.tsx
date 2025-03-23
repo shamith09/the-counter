@@ -79,11 +79,11 @@ const AnimatedNumber = ({ number }: { number: string }) => {
 
   const fontSize = useMemo(() => {
     const numDigits = number.length;
-    if (numDigits <= 6) return "text-7xl sm:text-8xl";
-    if (numDigits <= 10) return "text-6xl sm:text-7xl";
-    if (numDigits <= 14) return "text-5xl sm:text-6xl";
-    if (numDigits <= 18) return "text-4xl sm:text-5xl";
-    return "text-3xl sm:text-4xl";
+    if (numDigits <= 6) return "text-8xl sm:text-9xl";
+    if (numDigits <= 10) return "text-7xl sm:text-8xl";
+    if (numDigits <= 14) return "text-6xl sm:text-7xl";
+    if (numDigits <= 18) return "text-5xl sm:text-6xl";
+    return "text-4xl sm:text-5xl";
   }, [number]);
 
   return (
