@@ -820,7 +820,7 @@ export default function Home() {
           {pingTime !== null && (
             <>
               <span className="text-purple-300">|</span>
-              <span className="hidden sm:inline">Ping: </span>
+              <span className="hidden sm:inline text-purple-300">Ping: </span>
               <span className="text-purple-300">{pingTime}ms</span>
             </>
           )}
