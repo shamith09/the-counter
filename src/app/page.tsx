@@ -735,56 +735,58 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center text-purple-300 overflow-hidden relative select-none">
-      <div className="absolute top-0 pt-4 px-4 sm:px-6 z-50 flex items-center justify-between w-full">
-        <div className="flex items-center gap-2">
-          <AuthButton />
-          <Link
-            href="/stats"
-            className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
-            aria-label="Stats"
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span>Stats</span>
-          </Link>
-          <Link
-            href="/about"
-            className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
-            aria-label="About"
-          >
-            <Info className="h-4 w-4" />
-            <span>About</span>
-          </Link>
-          {session?.user && hasAds ? (
+      <div className="absolute top-0 pt-4 px-4 sm:px-6 z-50 flex flex-col sm:flex-row items-start sm:items-center justify-between w-full">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          <div className="flex items-center gap-2">
+            <AuthButton />
             <Link
-              href="/my-ads"
+              href="/stats"
               className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
-              aria-label="My Ads"
+              aria-label="Stats"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-              >
-                <rect width="18" height="12" x="3" y="6" rx="2" />
-                <path d="M3 10h18" />
-                <path d="M7 15h2" />
-                <path d="M11 15h6" />
-              </svg>
-              <span>My Ads</span>
+              <BarChart3 className="h-4 w-4" />
+              <span>Stats</span>
             </Link>
-          ) : (
-            <></>
-          )}
-          {session?.user ? (
-            !hasPayPalSetup && (
-              <>
+            <Link
+              href="/about"
+              className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+              aria-label="About"
+            >
+              <Info className="h-4 w-4" />
+              <span>About</span>
+            </Link>
+            {session?.user && hasAds ? (
+              <Link
+                href="/my-ads"
+                className="flex items-center gap-1 rounded-md bg-transparent px-2 sm:px-3 py-1.5 text-sm text-white hover:bg-purple-500/20"
+                aria-label="My Ads"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                >
+                  <rect width="18" height="12" x="3" y="6" rx="2" />
+                  <path d="M3 10h18" />
+                  <path d="M7 15h2" />
+                  <path d="M11 15h6" />
+                </svg>
+                <span>My Ads</span>
+              </Link>
+            ) : (
+              <></>
+            )}
+          </div>
+          <div className="flex mt-2 sm:mt-0">
+            {session?.user ? (
+              !hasPayPalSetup && (
                 <div className="flex text-yellow-400 text-xs sm:text-sm items-center">
                   <span>⚠️ Set up PayPal</span>
                   <Button
@@ -795,25 +797,30 @@ export default function Home() {
                     Set up now
                   </Button>
                 </div>
-              </>
-            )
-          ) : (
-            <div className="text-yellow-400 text-xs sm:text-sm">
-              ⚠️ Sign in for leaderboard
-            </div>
-          )}
+              )
+            ) : (
+              <div className="text-yellow-400 text-xs sm:text-sm">
+                ⚠️ Sign in for leaderboard
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Viewer count */}
-        <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm">
+        <div className="flex items-center gap-2 text-green-400 text-xs sm:text-sm mt-2 sm:mt-0">
           <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <span>
             {viewerCount}
-            <span> {viewerCount === 1 ? "person" : "people"}</span>
+            <span>
+              {" "}
+              {viewerCount === 1 ? "person" : "people"}
+              <span className="hidden sm:inline"> watching</span>
+            </span>
           </span>
           {pingTime !== null && (
             <>
               <span className="text-purple-300">|</span>
+              <span className="hidden sm:inline">Ping: </span>
               <span className="text-purple-300">{pingTime}ms</span>
             </>
           )}
