@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
     const tweetText =
       `🏆 Weekly Winner Announcement 🏆\n\n` +
       `Congratulations to ${winner.username} for winning $${winner.amount} this week!\n\n` +
-      `Join the competition at https://thecounter.live`;
+      `Join the competition at thecounter [.] live\n\n` +
+      `https://thecounter.live`;
 
     // Post tweet using our utility
     const result = await postTweet(tweetText);
