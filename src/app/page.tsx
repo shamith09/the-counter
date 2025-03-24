@@ -157,6 +157,13 @@ const PaymentForm = ({
         elements,
         confirmParams: {
           return_url: window.location.origin,
+          payment_method_data: {
+            billing_details: {
+              address: {
+                country: "US",
+              },
+            },
+          },
         },
         redirect: "if_required",
       });
