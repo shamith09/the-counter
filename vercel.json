@@ -35,6 +35,22 @@
     {
       "path": "/api/tasks/cleanup-old-activity-aggregates",
       "schedule": "45 1 * * *"
+    },
+    {
+      "path": "/api/tasks/post-counter-update",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/tasks/post-weekly-winner",
+      "schedule": "5 0 * * 1"
+    },
+    {
+      "path": "/api/tasks/post-winner-reminder-24h",
+      "schedule": "0 0 * * 0"
+    },
+    {
+      "path": "/api/tasks/post-winner-reminder-1h",
+      "schedule": "0 23 * * 0"
     }
   ]
 }
