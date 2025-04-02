@@ -34,7 +34,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EmailSubscriptionDialog } from "@/components/email-subscription-dialog";
 
 interface FloatingNumber {
   id: number;
@@ -791,7 +790,6 @@ export default function Home() {
             ) : (
               <></>
             )}
-            <EmailSubscriptionDialog />
           </div>
           <div className="flex mt-2 sm:mt-0">
             {session?.user ? (
