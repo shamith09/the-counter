@@ -269,3 +269,44 @@ CREATE INDEX payment_verifications_created_at_idx ON payment_verifications(creat
 -- Grant permissions for all tables
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO neondb_owner;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO neondb_owner;
+
+-- Email subscription management table
+CREATE TABLE email_subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    subscribe_counter_updates BOOLEAN NOT NULL DEFAULT FALSE,
+    subscribe_winner_24h BOOLEAN NOT NULL DEFAULT FALSE,
+    subscribe_winner_1h BOOLEAN NOT NULL DEFAULT FALSE,
+    subscribe_leaderboard_changes BOOLEAN NOT NULL DEFAULT FALSE,
+    unsubscribe_token UUID NOT NULL DEFAULT uuid_generate_v4(),
+    subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(email)
+);
+
+-- Create index for efficient lookups
+CREATE INDEX email_subscriptions_user_id_idx ON email_subscriptions(user_id);
+CREATE INDEX email_subscriptions_email_idx ON email_subscriptions(email);
+CREATE INDEX email_subscriptions_unsubscribe_token_idx ON email_subscriptions(unsubscribe_token);
+
+-- Email sending logs for tracking delivery
+CREATE TABLE email_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subscription_id UUID REFERENCES email_subscriptions(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    email_type VARCHAR(50) NOT NULL,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    success BOOLEAN NOT NULL DEFAULT TRUE,
+    error_message TEXT
+);
+
+-- Create index for email logs
+CREATE INDEX email_logs_subscription_id_idx ON email_logs(subscription_id);
+CREATE INDEX email_logs_email_type_idx ON email_logs(email_type);
+CREATE INDEX email_logs_sent_at_idx ON email_logs(sent_at);
+
+-- Grant permissions for new tables
+GRANT ALL PRIVILEGES ON TABLE email_subscriptions TO neondb_owner;
+GRANT ALL PRIVILEGES ON TABLE email_logs TO neondb_owner;
