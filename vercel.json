@@ -51,22 +51,6 @@
     {
       "path": "/api/tasks/post-winner-reminder-1h",
       "schedule": "0 23 * * 0"
-    },
-    {
-      "path": "/api/tasks/notify-counter-milestone",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/tasks/notify-winner-announcement",
-      "schedule": "0 0 * * 0"
-    },
-    {
-      "path": "/api/tasks/notify-winner-announcement",
-      "schedule": "0 23 * * 0"
-    },
-    {
-      "path": "/api/tasks/notify-leaderboard-change",
-      "schedule": "30 */2 * * *"
     }
   ]
 }
