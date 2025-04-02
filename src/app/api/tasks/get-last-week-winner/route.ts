@@ -29,14 +29,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the top user from the previous week
-    const lastWeekStart = new Date();
-    const day = lastWeekStart.getUTCDay();
-    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - day - 7 + 1);
-    lastWeekStart.setUTCHours(0, 0, 0, 0);
+    const today = new Date();
+    const day = today.getUTCDay();
+    // Calculate the Monday of the current week
+    const currentWeekMonday = new Date(today);
+    currentWeekMonday.setUTCDate(today.getUTCDate() - day + 1);
+    currentWeekMonday.setUTCHours(0, 0, 0, 0);
 
-    const lastWeekEnd = new Date();
-    lastWeekEnd.setUTCDate(lastWeekStart.getUTCDate() + 7);
-    lastWeekEnd.setUTCHours(0, 0, 0, 0);
+    // Calculate the Monday of the previous week
+    const lastWeekStart = new Date(currentWeekMonday);
+    lastWeekStart.setUTCDate(currentWeekMonday.getUTCDate() - 7);
+
+    // Calculate the Monday of the current week (end date)
+    const lastWeekEnd = new Date(currentWeekMonday);
 
     console.log("[get-last-week-winner] Querying for top users between:", {
       lastWeekStart: lastWeekStart.toISOString(),
