@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Get the top user from the previous week
     const lastWeekStart = new Date();
     const day = lastWeekStart.getUTCDay();
-    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - day - 7);
+    lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - day - 7 + 1);
     lastWeekStart.setUTCHours(0, 0, 0, 0);
 
     const lastWeekEnd = new Date();
